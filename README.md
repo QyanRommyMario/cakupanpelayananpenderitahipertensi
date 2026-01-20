@@ -1,36 +1,216 @@
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# 📊 Dashboard SPM Kesehatan
 
-## Getting Started
+Dashboard monitoring **Standar Pelayanan Minimal (SPM)** untuk Cakupan Pelayanan Penderita Hipertensi.
 
-First, run the development server:
+## 🚀 Tech Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- **Frontend**: Next.js 14 (App Router) + Tailwind CSS
+- **Backend**: Supabase (PostgreSQL + Auth)
+- **Charts**: Recharts
+- **ETL**: Google Apps Script
+
+---
+
+## 📋 Setup Instructions
+
+### 1️⃣ Setup Supabase
+
+1. Buat project baru di [supabase.com](https://supabase.com)
+2. Buka **SQL Editor** dan jalankan script dari `schema.sql`:
+   ```sql
+   -- Copy semua isi file schema.sql dan jalankan di SQL Editor
+   ```
+3. Buka **Settings > API** dan copy:
+   - `Project URL` → `NEXT_PUBLIC_SUPABASE_URL`
+   - `anon public` key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `service_role` key → `SUPABASE_SERVICE_ROLE_KEY`
+
+4. Buat user untuk login:
+   - Buka **Authentication > Users**
+   - Klik **Add User** > **Create New User**
+   - Isi email dan password
+
+### 2️⃣ Setup Environment Variables
+
+Edit file `.env.local`:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+SYNC_TOKEN=spm-dashboard-sync-token-2025
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 3️⃣ Run Development Server
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+```bash
+npm install
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
+Buka http://localhost:3000 dan login dengan user Supabase.
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## 🔗 Setup Google Apps Script
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Step 1: Buka Google Sheets
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
+Buka spreadsheet data pivot table:
+https://docs.google.com/spreadsheets/d/1RrqiFWkys-8cBcsOQwSnPHSO8HdC3zjAu_7pB1gyv7U/edit
 
-## Deploy on Vercel
+### Step 2: Buka Apps Script
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. Buka menu **Extensions > Apps Script**
+2. Atau buka langsung: https://script.google.com/u/0/home/projects/17kZsyj4YgkgkyGzjmhNTwL0P5S4EdjnDMhu-q9dRA_ofOnZWsw7rcGEY/edit
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+### Step 3: Update Configuration
+
+Edit `CONFIG` di `Code.gs`:
+
+```javascript
+const CONFIG = {
+  // Untuk development lokal:
+  API_URL: "http://localhost:3000/api/sync",
+
+  // Untuk production (setelah deploy ke Vercel):
+  // API_URL: "https://your-app.vercel.app/api/sync",
+
+  // Harus sama dengan SYNC_TOKEN di .env.local
+  SYNC_TOKEN: "spm-dashboard-sync-token-2025",
+
+  // Nama sheet dengan data pivot
+  SHEET_NAME: "Capaian PKM",
+
+  // Periode pelaporan
+  PERIOD: "TW4-2025",
+
+  // ...
+};
+```
+
+### Step 4: Jalankan Sync
+
+1. Refresh Google Sheets (F5)
+2. Akan muncul menu **📊 SPM Dashboard** di toolbar
+3. Klik **🔄 Sync Data to Dashboard**
+4. Data akan masuk ke Supabase dan tampil di dashboard
+
+---
+
+## 📊 Struktur Data Pivot Table
+
+Sheet harus memiliki struktur berikut:
+
+| Kolom            | Isi                               |
+| ---------------- | --------------------------------- |
+| A                | Nama Indikator                    |
+| B-P (15 kolom)   | **Sasaran** per Puskesmas         |
+| Q-AE (15 kolom)  | **Terlayani** per Puskesmas       |
+| AF-AT (15 kolom) | **Belum Terlayani** per Puskesmas |
+
+Urutan Puskesmas (harus konsisten):
+
+1. ANT - Antapani
+2. BTR - Batununggal
+3. BTL - Buahbatu
+4. CBI - Cibiru
+5. CBL - Cibeunying
+6. CDG - Cidadap
+7. CGR - Cigereleng
+8. CKL - Cikutra
+9. CMH - Cimahi
+10. GDJ - Gede Bage
+11. KBN - Kiaracondong
+12. LBK - Lembang
+13. MJL - Majalaya
+14. RCG - Rancaekek
+15. SBR - Soreang
+
+---
+
+## 🗂️ Struktur Project
+
+```
+├── src/
+│   ├── app/
+│   │   ├── api/sync/route.js    # API endpoint untuk sync
+│   │   ├── data/page.js         # Halaman kelola data
+│   │   ├── login/page.js        # Halaman login
+│   │   ├── page.js              # Dashboard utama
+│   │   ├── layout.js            # Root layout
+│   │   └── globals.css          # Tailwind CSS
+│   ├── components/
+│   │   └── DashboardLayout.js   # Sidebar layout
+│   ├── lib/
+│   │   └── supabase.js          # Supabase client
+│   └── middleware.js            # Auth middleware
+├── google-apps-script/
+│   └── Code.gs                  # ETL script
+├── schema.sql                   # Database schema
+├── .env.local                   # Environment variables
+└── package.json
+```
+
+---
+
+## 🔐 API Endpoint
+
+### POST /api/sync
+
+Endpoint untuk menerima data dari Google Apps Script.
+
+**Headers:**
+
+```
+Content-Type: application/json
+x-sync-token: spm-dashboard-sync-token-2025
+```
+
+**Body:**
+
+```json
+{
+  "period": "TW4-2025",
+  "data": [
+    {
+      "puskesmas_code": "ANT",
+      "indicator_name": "Pelayanan Hipertensi",
+      "target_qty": 100,
+      "realization_qty": 85,
+      "unserved_qty": 15
+    }
+  ]
+}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "period": "TW4-2025",
+  "upserted": 150,
+  "total": 150
+}
+```
+
+---
+
+## 🚀 Deploy ke Vercel
+
+1. Push code ke GitHub
+2. Import project di [vercel.com](https://vercel.com)
+3. Add environment variables:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `SYNC_TOKEN`
+4. Deploy!
+5. Update `API_URL` di Google Apps Script dengan URL Vercel
+
+---
+
+## 📝 License
+
+MIT
