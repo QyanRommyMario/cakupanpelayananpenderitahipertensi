@@ -25,7 +25,10 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      window.location.href = "/data";
+      // CRITICAL: Refresh router to update middleware state with new session cookie
+      router.refresh();
+      // Redirect to dashboard
+      router.push("/");
     }
   };
 
