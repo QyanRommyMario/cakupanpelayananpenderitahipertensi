@@ -26,7 +26,7 @@ export default function LoginPage() {
       setLoading(false);
     } else {
       // Wait for session to be fully set
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
       // Hard redirect to ensure middleware picks up new session
       window.location.href = "/";
     }
