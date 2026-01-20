@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   BarChart,
   Bar,
@@ -12,14 +12,11 @@ import {
 } from "recharts";
 import { supabase } from "@/lib/supabase";
 
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/XXXXX/exec";
-const SYNC_TOKEN = "spm-dashboard-sync-token-2025";
+const PUSKESMAS_LIST = ["ANT", "BTR", "BTL", "KDL", "LEE", "MYB", "MLN", "PMR", "PDK", "PTB", "PTW", "TBY", "TMT", "WGK", "KAB"];
 
 export default function DashboardPage() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [editingId, setEditingId] = useState(null);
-  const [editValue, setEditValue] = useState("");
 
   useEffect(() => {
     fetchData();
@@ -30,8 +27,6 @@ export default function DashboardPage() {
       const { data: result, error } = await supabase
         .from("achievements")
         .select("*")
-        // Sembunyikan 'KAB' dari list tabel jika mau, atau biarkan tampil
-        // .neq('puskesmas_code', 'KAB')
         .order("puskesmas_code", { ascending: true });
 
       if (error) throw error;
@@ -43,56 +38,32 @@ export default function DashboardPage() {
     }
   }
 
-  const handleEditClick = (item) => {
-    setEditingId(item.id);
-    setEditValue(item.realization_qty);
-  };
+  // Get unique indicators
+  const indicators = useMemo(() => {
+    return [...new Set(data.map((d) => d.indicator_name))];
+  }, [data]);
 
-  const handleSave = async (item) => {
-    const newValue = Math.round(Number(editValue));
+  // Calculate summary statistics (excluding KAB to avoid double counting)
+  const summaryStats = useMemo(() => {
+    const filteredData = data.filter((d) => d.puskesmas_code !== "KAB");
+    const totalTarget = filteredData.reduce((sum, d) => sum + d.target_qty, 0);
+    const totalRealization = filteredData.reduce((sum, d) => sum + d.realization_qty, 0);
+    const totalUnserved = filteredData.reduce((sum, d) => sum + d.unserved_qty, 0);
+    const percentage = totalTarget > 0 ? ((totalRealization / totalTarget) * 100).toFixed(1) : 0;
 
-    // Optimistic Update
-    const updatedData = data.map((d) =>
-      d.id === item.id ? { ...d, realization_qty: newValue } : d,
-    );
-    setData(updatedData);
-    setEditingId(null);
+    return {
+      totalTarget,
+      totalRealization,
+      totalUnserved,
+      percentage,
+    };
+  }, [data]);
 
-    try {
-      // Sync to Excel
-      await fetch(APPS_SCRIPT_URL, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          token: SYNC_TOKEN,
-          puskesmas_code: item.puskesmas_code,
-          indicator_name: item.indicator_name,
-          type: "realization_qty",
-          value: newValue,
-        }),
-      });
-
-      // Sync to Supabase
-      await supabase
-        .from("achievements")
-        .update({
-          realization_qty: newValue,
-          unserved_qty: Math.max(0, item.target_qty - newValue),
-        })
-        .eq("id", item.id);
-
-      alert("Tersimpan!");
-    } catch (err) {
-      alert("Gagal: " + err.message);
-      fetchData();
-    }
-  };
-
-  // Group Data for Chart (Exclude KAB for cleaner chart usually, or keep it)
-  const chartData = Object.values(
-    data
-      .filter((d) => d.puskesmas_code !== "KAB") // Filter KAB agar grafik tidak timpang
+  // Group Data for Chart (Exclude KAB for cleaner chart)
+  const chartData = useMemo(() => {
+    const pkmOrder = PUSKESMAS_LIST.filter((p) => p !== "KAB");
+    const grouped = data
+      .filter((d) => d.puskesmas_code !== "KAB")
       .reduce((acc, curr) => {
         if (!acc[curr.puskesmas_code]) {
           acc[curr.puskesmas_code] = {
@@ -104,124 +75,261 @@ export default function DashboardPage() {
         acc[curr.puskesmas_code].Target += curr.target_qty;
         acc[curr.puskesmas_code].Realisasi += curr.realization_qty;
         return acc;
-      }, {}),
-  );
+      }, {});
+    return pkmOrder.map((pkm) => grouped[pkm]).filter(Boolean);
+  }, [data]);
 
-  if (loading) return <div className="p-10 text-center">Loading Data...</div>;
+  // Helper to find cell data
+  const getCellData = (indicatorName, pkmCode) => {
+    return data.find(
+      (d) => d.indicator_name === indicatorName && d.puskesmas_code === pkmCode
+    );
+  };
+
+  // Custom Tooltip
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      const target = payload.find((p) => p.dataKey === "Target")?.value || 0;
+      const realisasi = payload.find((p) => p.dataKey === "Realisasi")?.value || 0;
+      const pct = target > 0 ? ((realisasi / target) * 100).toFixed(1) : 0;
+
+      return (
+        <div className="bg-white p-3 rounded shadow-lg border border-gray-200 text-sm">
+          <p className="font-semibold text-gray-800 mb-1">{label}</p>
+          <p className="text-gray-600">
+            Sasaran: <span className="font-medium">{target.toLocaleString("id-ID")}</span>
+          </p>
+          <p className="text-blue-600">
+            Realisasi: <span className="font-medium">{realisasi.toLocaleString("id-ID")}</span>
+          </p>
+          <p className="text-green-700 mt-1 pt-1 border-t border-gray-200">
+            Capaian: <span className="font-semibold">{pct}%</span>
+          </p>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  // Loading Skeleton
+  if (loading) {
+    return (
+      <div className="p-6 bg-gray-50 min-h-screen">
+        <div className="max-w-full mx-auto">
+          <div className="animate-pulse">
+            <div className="h-7 bg-gray-200 rounded w-64 mb-6"></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="bg-white p-5 rounded border border-gray-200">
+                  <div className="h-4 bg-gray-100 rounded w-20 mb-2"></div>
+                  <div className="h-7 bg-gray-200 rounded w-28"></div>
+                </div>
+              ))}
+            </div>
+            <div className="bg-white p-5 rounded border border-gray-200 mb-6">
+              <div className="h-5 bg-gray-100 rounded w-48 mb-4"></div>
+              <div className="h-[300px] bg-gray-50 rounded"></div>
+            </div>
+            <div className="bg-white p-5 rounded border border-gray-200">
+              <div className="h-5 bg-gray-100 rounded w-40 mb-4"></div>
+              <div className="h-[200px] bg-gray-50 rounded"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
-      <h1 className="text-2xl font-bold mb-6 text-gray-800">
-        Dashboard SPM Hipertensi
-      </h1>
-
-      {/* CHART */}
-      <div className="bg-white p-6 rounded-lg shadow-md mb-8">
-        <h2 className="text-lg font-semibold mb-4">
-          Grafik Kinerja PKM (Tanpa Kabupaten)
-        </h2>
-        <div className="h-[400px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={chartData}
-              margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="name" />
-              <YAxis allowDecimals={false} />
-              <Tooltip
-                formatter={(val) => new Intl.NumberFormat("id-ID").format(val)}
-              />
-              <Legend />
-              <Bar
-                dataKey="Target"
-                fill="#94a3b8"
-                name="Sasaran"
-                radius={[4, 4, 0, 0]}
-              />
-              <Bar
-                dataKey="Realisasi"
-                fill="#3b82f6"
-                name="Realisasi"
-                radius={[4, 4, 0, 0]}
-              />
-            </BarChart>
-          </ResponsiveContainer>
+      <div className="max-w-full mx-auto">
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold text-gray-800">
+            Dashboard SPM Hipertensi
+          </h1>
+          <p className="text-gray-500 text-sm mt-1">
+            Monitoring Cakupan Pelayanan Penderita Hipertensi
+          </p>
         </div>
-      </div>
 
-      {/* TABLE */}
-      <div className="bg-white p-6 rounded-lg shadow-md overflow-x-auto">
-        <h2 className="text-lg font-semibold mb-4">
-          Detail Data Lengkap (Termasuk KAB)
-        </h2>
-        <table className="w-full text-left border-collapse text-sm">
-          <thead>
-            <tr className="bg-gray-100 border-b">
-              <th className="p-3">Kode</th>
-              <th className="p-3">Indikator</th>
-              <th className="p-3">Satuan</th>
-              <th className="p-3 text-right">Sasaran</th>
-              <th className="p-3 text-right">Realisasi</th>
-              <th className="p-3 text-right">Belum</th>
-              <th className="p-3 text-center">Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((row) => (
-              <tr
-                key={row.id}
-                className={`border-b hover:bg-gray-50 ${row.puskesmas_code === "KAB" ? "bg-yellow-50 font-semibold" : ""}`}
+        {/* Summary Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {/* Total Sasaran */}
+          <div className="bg-white p-5 rounded border border-gray-200 shadow-sm">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+              Total Sasaran
+            </p>
+            <p className="text-2xl font-semibold text-gray-800 mt-1">
+              {summaryStats.totalTarget.toLocaleString("id-ID")}
+            </p>
+          </div>
+
+          {/* Total Realisasi */}
+          <div className="bg-white p-5 rounded border border-gray-200 shadow-sm">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+              Total Realisasi
+            </p>
+            <p className="text-2xl font-semibold text-blue-600 mt-1">
+              {summaryStats.totalRealization.toLocaleString("id-ID")}
+            </p>
+          </div>
+
+          {/* Persentase Capaian */}
+          <div className="bg-white p-5 rounded border border-gray-200 shadow-sm">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+              Persentase Capaian
+            </p>
+            <p className="text-2xl font-semibold text-green-600 mt-1">
+              {summaryStats.percentage}%
+            </p>
+            <div className="mt-2 w-full bg-gray-100 rounded-full h-1.5">
+              <div
+                className="bg-green-500 h-1.5 rounded-full transition-all duration-500"
+                style={{ width: `${Math.min(summaryStats.percentage, 100)}%` }}
+              ></div>
+            </div>
+          </div>
+
+          {/* Belum Terlayani */}
+          <div className="bg-white p-5 rounded border border-gray-200 shadow-sm">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+              Belum Terlayani
+            </p>
+            <p className="text-2xl font-semibold text-red-600 mt-1">
+              {summaryStats.totalUnserved.toLocaleString("id-ID")}
+            </p>
+          </div>
+        </div>
+
+        {/* Chart */}
+        <div className="bg-white p-5 rounded border border-gray-200 shadow-sm mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-semibold text-gray-800">
+              Grafik Kinerja per Puskesmas
+            </h2>
+            <div className="flex items-center gap-4 text-xs">
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 bg-slate-400 rounded-sm"></div>
+                <span className="text-gray-600">Sasaran</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 bg-blue-500 rounded-sm"></div>
+                <span className="text-gray-600">Realisasi</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="h-[320px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={chartData}
+                margin={{ top: 10, right: 20, left: 10, bottom: 40 }}
               >
-                <td className="p-3 font-bold">{row.puskesmas_code}</td>
-                <td className="p-3">{row.indicator_name}</td>
-                <td className="p-3 text-gray-500">{row.unit}</td>
-                <td className="p-3 text-right">
-                  {row.target_qty.toLocaleString("id-ID")}
-                </td>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                <XAxis
+                  dataKey="name"
+                  tick={{ fontSize: 11, fill: "#6b7280" }}
+                  angle={-45}
+                  textAnchor="end"
+                  height={60}
+                  interval={0}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  tick={{ fontSize: 11, fill: "#6b7280" }}
+                  tickFormatter={(value) => value.toLocaleString("id-ID")}
+                  width={50}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend
+                  verticalAlign="top"
+                  height={30}
+                  wrapperStyle={{ fontSize: "12px" }}
+                />
+                <Bar
+                  dataKey="Target"
+                  fill="#94a3b8"
+                  name="Sasaran"
+                  radius={[3, 3, 0, 0]}
+                  maxBarSize={40}
+                />
+                <Bar
+                  dataKey="Realisasi"
+                  fill="#3b82f6"
+                  name="Realisasi"
+                  radius={[3, 3, 0, 0]}
+                  maxBarSize={40}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
 
-                <td className="p-3 text-right">
-                  {editingId === row.id ? (
-                    <input
-                      type="number"
-                      className="border p-1 w-20 text-right"
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                    />
-                  ) : (
-                    <span className="font-semibold text-blue-600">
-                      {row.realization_qty.toLocaleString("id-ID")}
-                    </span>
-                  )}
-                </td>
+        {/* Matrix Table */}
+        <div className="bg-white rounded border border-gray-200 shadow-sm">
+          <div className="p-4 border-b border-gray-200">
+            <h2 className="text-base font-semibold text-gray-800">
+              Matrix Realisasi per Indikator
+            </h2>
+            <p className="text-xs text-gray-500 mt-1">
+              Data realisasi (jumlah) per puskesmas
+            </p>
+          </div>
 
-                <td className="p-3 text-right text-red-500">
-                  {row.unserved_qty > 0
-                    ? row.unserved_qty.toLocaleString("id-ID")
-                    : "-"}
-                </td>
-
-                <td className="p-3 text-center">
-                  {editingId === row.id ? (
-                    <button
-                      onClick={() => handleSave(row)}
-                      className="bg-green-500 text-white px-3 py-1 rounded text-xs"
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-slate-100">
+                  <th className="border border-gray-300 p-2 text-left font-semibold text-gray-700 sticky left-0 bg-slate-100 z-10 min-w-[200px]">
+                    Indikator
+                  </th>
+                  {PUSKESMAS_LIST.map((pkm) => (
+                    <th
+                      key={pkm}
+                      className={`border border-gray-300 p-2 text-center font-semibold text-gray-700 min-w-[70px] ${
+                        pkm === "KAB" ? "bg-amber-50" : ""
+                      }`}
                     >
-                      Simpan
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => handleEditClick(row)}
-                      className="bg-gray-200 text-gray-700 px-3 py-1 rounded text-xs hover:bg-gray-300"
-                    >
-                      Edit
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                      {pkm}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {indicators.map((ind, idx) => (
+                  <tr key={ind} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                    <td className="border border-gray-300 p-2 text-gray-800 font-medium sticky left-0 bg-inherit z-10">
+                      {ind}
+                    </td>
+                    {PUSKESMAS_LIST.map((pkm) => {
+                      const cellData = getCellData(ind, pkm);
+                      const value = cellData?.realization_qty ?? "-";
+                      const isKab = pkm === "KAB";
+                      return (
+                        <td
+                          key={pkm}
+                          className={`border border-gray-300 p-2 text-center tabular-nums ${
+                            isKab ? "bg-amber-50 font-semibold" : ""
+                          }`}
+                        >
+                          {typeof value === "number"
+                            ? value.toLocaleString("id-ID")
+                            : value}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="mt-4 text-center text-xs text-gray-400">
+          Data diperbarui secara realtime dari Google Sheets dan Supabase
+        </div>
       </div>
     </div>
   );
