@@ -16,7 +16,7 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -25,10 +25,10 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      // CRITICAL: Refresh router to update middleware state with new session cookie
-      router.refresh();
-      // Redirect to dashboard
-      router.push("/");
+      // Wait for session to be fully set
+      await new Promise(resolve => setTimeout(resolve, 500));
+      // Hard redirect to ensure middleware picks up new session
+      window.location.href = "/";
     }
   };
 
