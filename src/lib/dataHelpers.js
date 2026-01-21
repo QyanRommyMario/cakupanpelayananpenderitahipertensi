@@ -32,7 +32,7 @@ export async function getUniqueIndicators() {
 
   // Convert to array and sort alphabetically
   return Array.from(indicatorMap.values()).sort((a, b) =>
-    a.indicator_name.localeCompare(b.indicator_name, "id")
+    a.indicator_name.localeCompare(b.indicator_name, "id"),
   );
 }
 
@@ -109,9 +109,7 @@ export async function getAchievements(puskesmasCode, period = null) {
  * @returns {Promise<Array<string>>}
  */
 export async function getUniquePeriods() {
-  const { data, error } = await supabase
-    .from("achievements")
-    .select("period");
+  const { data, error } = await supabase.from("achievements").select("period");
 
   if (error) {
     console.error("Error fetching periods:", error);
@@ -133,11 +131,9 @@ export async function getUniquePeriods() {
  * @returns {Promise<{success: boolean, error?: string}>}
  */
 export async function upsertAchievements(records) {
-  const { error } = await supabase
-    .from("achievements")
-    .upsert(records, {
-      onConflict: "puskesmas_code,indicator_name,period",
-    });
+  const { error } = await supabase.from("achievements").upsert(records, {
+    onConflict: "puskesmas_code,indicator_name,period",
+  });
 
   if (error) {
     console.error("Error upserting achievements:", error);

@@ -97,7 +97,14 @@ export default function LoginPage() {
                 placeholder="[kode]@dinkes.go.id"
               />
               <p className="text-xs text-gray-500 mt-1">
-                Contoh: <code className="bg-gray-100 px-1 rounded">pmr@dinkes.go.id</code>, <code className="bg-gray-100 px-1 rounded">ant@dinkes.go.id</code>
+                Contoh:{" "}
+                <code className="bg-gray-100 px-1 rounded">
+                  pmr@dinkes.go.id
+                </code>
+                ,{" "}
+                <code className="bg-gray-100 px-1 rounded">
+                  ant@dinkes.go.id
+                </code>
               </p>
             </div>
 
@@ -126,7 +133,8 @@ export default function LoginPage() {
 
           <div className="mt-6 pt-4 border-t border-gray-100">
             <p className="text-xs text-gray-500 text-center">
-              Login dengan akun Puskesmas Anda. Hubungi admin jika belum memiliki akun.
+              Login dengan akun Puskesmas Anda. Hubungi admin jika belum
+              memiliki akun.
             </p>
           </div>
         </div>
