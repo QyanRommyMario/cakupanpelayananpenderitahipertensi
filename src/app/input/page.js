@@ -2,9 +2,23 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/XXXXX/exec";
-const SYNC_TOKEN = "spm-dashboard-sync-token-2025";
-const PUSKESMAS_LIST = ["ANT", "BTR", "BTL", "KDL", "LEE", "MYB", "MLN", "PMR", "PDK", "PTB", "PTW", "TBY", "TMT", "WGK", "KAB"];
+const PUSKESMAS_LIST = [
+  "ANT",
+  "BTR",
+  "BTL",
+  "KDL",
+  "LEE",
+  "MYB",
+  "MLN",
+  "PMR",
+  "PDK",
+  "PTB",
+  "PTW",
+  "TBY",
+  "TMT",
+  "WGK",
+  "KAB",
+];
 
 export default function InputDataPage() {
   const [data, setData] = useState([]);
@@ -45,10 +59,11 @@ export default function InputDataPage() {
   const getCellData = useCallback(
     (indicatorName, pkmCode) => {
       return data.find(
-        (d) => d.indicator_name === indicatorName && d.puskesmas_code === pkmCode
+        (d) =>
+          d.indicator_name === indicatorName && d.puskesmas_code === pkmCode,
       );
     },
-    [data]
+    [data],
   );
 
   const handleCellClick = (indicatorName, pkmCode) => {
@@ -113,24 +128,33 @@ export default function InputDataPage() {
               realization_qty: newValue,
               unserved_qty: Math.max(0, d.target_qty - newValue),
             }
-          : d
+          : d,
       );
       setData(updatedData);
 
       try {
-        // Sync to Google Sheets
-        await fetch(APPS_SCRIPT_URL, {
-          method: "POST",
-          mode: "no-cors",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            token: SYNC_TOKEN,
-            puskesmas_code: cellData.puskesmas_code,
-            indicator_name: cellData.indicator_name,
-            type: "realization_qty",
-            value: newValue,
-          }),
-        });
+        // Sync to Google Sheets (jika URL tersedia)
+        const scriptUrl = process.env.NEXT_PUBLIC_GOOGLE_SCRIPT_URL;
+        const syncToken = process.env.NEXT_PUBLIC_SYNC_TOKEN;
+
+        if (scriptUrl) {
+          await fetch(scriptUrl, {
+            method: "POST",
+            mode: "no-cors",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              token: syncToken || "",
+              puskesmas_code: cellData.puskesmas_code,
+              indicator_name: cellData.indicator_name,
+              type: "realization_qty",
+              value: newValue,
+            }),
+          });
+        } else {
+          console.warn(
+            "⚠️ NEXT_PUBLIC_GOOGLE_SCRIPT_URL belum diset, skip sync ke Google Sheets",
+          );
+        }
 
         // Sync to Supabase
         const { error: updateError } = await supabase
@@ -150,7 +174,7 @@ export default function InputDataPage() {
         setSaving(false);
       }
     },
-    [data, editValue, saving, getCellData]
+    [data, editValue, saving, getCellData],
   );
 
   // Loading Skeleton
@@ -186,14 +210,22 @@ export default function InputDataPage() {
       <div className="max-w-full mx-auto">
         {/* Header */}
         <div className="mb-4">
-          <h1 className="text-2xl font-semibold text-gray-800">Input / Edit Data Realisasi</h1>
+          <h1 className="text-2xl font-semibold text-gray-800">
+            Input / Edit Data Realisasi
+          </h1>
           <p className="text-gray-500 text-sm mt-1">
             Klik sel untuk mengedit. Tekan{" "}
-            <kbd className="px-1.5 py-0.5 bg-gray-200 text-gray-700 rounded text-xs font-mono">Enter</kbd>{" "}
+            <kbd className="px-1.5 py-0.5 bg-gray-200 text-gray-700 rounded text-xs font-mono">
+              Enter
+            </kbd>{" "}
             untuk simpan,{" "}
-            <kbd className="px-1.5 py-0.5 bg-gray-200 text-gray-700 rounded text-xs font-mono">Tab</kbd>{" "}
+            <kbd className="px-1.5 py-0.5 bg-gray-200 text-gray-700 rounded text-xs font-mono">
+              Tab
+            </kbd>{" "}
             untuk pindah ke sel berikutnya,{" "}
-            <kbd className="px-1.5 py-0.5 bg-gray-200 text-gray-700 rounded text-xs font-mono">Esc</kbd>{" "}
+            <kbd className="px-1.5 py-0.5 bg-gray-200 text-gray-700 rounded text-xs font-mono">
+              Esc
+            </kbd>{" "}
             untuk batal.
           </p>
         </div>
@@ -256,7 +288,10 @@ export default function InputDataPage() {
               </thead>
               <tbody>
                 {indicators.map((ind, idx) => (
-                  <tr key={ind} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                  <tr
+                    key={ind}
+                    className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}
+                  >
                     <td className="border border-gray-300 p-2 text-gray-800 font-medium sticky left-0 bg-inherit z-10">
                       {ind}
                     </td>
@@ -292,7 +327,9 @@ export default function InputDataPage() {
                           ) : (
                             <div
                               className={`p-2 tabular-nums ${
-                                isKab ? "font-semibold text-amber-800" : "text-gray-700"
+                                isKab
+                                  ? "font-semibold text-amber-800"
+                                  : "text-gray-700"
                               }`}
                             >
                               {typeof value === "number"
@@ -313,7 +350,8 @@ export default function InputDataPage() {
         {/* Footer */}
         <div className="mt-4 flex items-center justify-between text-xs text-gray-500">
           <span>
-            {indicators.length} indikator x {PUSKESMAS_LIST.length} puskesmas = {data.length} sel data
+            {indicators.length} indikator x {PUSKESMAS_LIST.length} puskesmas ={" "}
+            {data.length} sel data
           </span>
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-1.5">

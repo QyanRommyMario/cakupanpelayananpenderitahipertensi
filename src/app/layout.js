@@ -1,5 +1,4 @@
 import "./globals.css";
-import NavbarWrapper from "@/components/NavbarWrapper";
 
 export const metadata = {
   title: "Dashboard SPM - Cakupan Pelayanan Hipertensi",
@@ -10,10 +9,7 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="id">
-      <body className="antialiased bg-gray-50 font-sans">
-        <NavbarWrapper />
-        <main>{children}</main>
-      </body>
+      <body className="antialiased bg-gray-50 font-sans">{children}</body>
     </html>
   );
 }
