@@ -13,23 +13,14 @@ import {
   getQuartersForYear,
   formatPeriodLabel,
 } from "@/utils/periods";
-
-// STRICT INDICATOR ORDER - Same as Input page
-const INDICATOR_ORDER = [
-  "JUMLAH YANG HARUS DILAYANI",
-  "Pedoman pengendalian Hipertensi dan media Komunikasi, Informasi, Edukasi (KIE)",
-  "Media Promosi Kesehatan",
-  "Obat Hipertensi",
-  "Tensimeter",
-  "Formulir pencatatan dan pelaporan Aplikasi Sehat Indonesiaku (ASIK)",
-  "Tenaga Medis : Dokter",
-  "Tenaga Kesehatan : Bidan",
-  "Tenaga Kesehatan : Perawat",
-  "Tenaga Kesehatan : Tenaga Gizi",
-  "Tenaga Kesehatan : Tenaga Promosi Kesehatan dan Ilmu Perilaku",
-  "Tenaga Kesehatan : Tenaga Kefarmasian",
-  "Tenaga Kesehatan : Tenaga Kesehatan Masyarakat",
-];
+import {
+  PROGRAM_TYPES,
+  PROGRAM_TYPES_LIST,
+  isValidProgramType,
+  getProgram,
+  getIndicatorsForProgram,
+  getProgramLabel,
+} from "@/utils/constants";
 
 export default function LaporanPage() {
   const router = useRouter();
@@ -47,7 +38,12 @@ export default function LaporanPage() {
   // Filter states
   const [selectedPuskesmas, setSelectedPuskesmas] = useState("");
   const [selectedPeriod, setSelectedPeriod] = useState("");
+  const [selectedProgramType, setSelectedProgramType] = useState(PROGRAM_TYPES.HIPERTENSI); // BARU
   const periodOptions = useMemo(() => generateTriwulanOptions(), []);
+
+  // Get program config and indicators dynamically
+  const programConfig = useMemo(() => getProgram(selectedProgramType), [selectedProgramType]);
+  const programIndicators = useMemo(() => getIndicatorsForProgram(selectedProgramType), [selectedProgramType]);
 
   // Check if user is admin
   const checkIsAdmin = (email) => {
@@ -113,7 +109,13 @@ export default function LaporanPage() {
   // Fetch data when filters change
   useEffect(() => {
     async function fetchData() {
-      if (!selectedPeriod) return;
+      if (!selectedPeriod || !selectedProgramType) return;
+
+      // Validasi program type
+      if (!isValidProgramType(selectedProgramType)) {
+        setError(`Program type tidak valid: ${selectedProgramType}`);
+        return;
+      }
 
       try {
         setLoadingData(true);
@@ -121,7 +123,8 @@ export default function LaporanPage() {
         let query = supabase
           .from("achievements")
           .select("*")
-          .neq("puskesmas_code", "KAB");
+          .neq("puskesmas_code", "KAB")
+          .eq("program_type", selectedProgramType); // FILTER BY PROGRAM TYPE
 
         // Handle annual recap vs quarterly
         if (isAnnualPeriod(selectedPeriod)) {
@@ -150,7 +153,7 @@ export default function LaporanPage() {
     }
 
     fetchData();
-  }, [selectedPuskesmas, selectedPeriod]);
+  }, [selectedPuskesmas, selectedPeriod, selectedProgramType]); // Tambahkan dependency
 
   // Is showing all puskesmas (recap view)?
   const isRecapView = selectedPuskesmas === "all";
@@ -175,8 +178,8 @@ export default function LaporanPage() {
       indicatorData[row.indicator_name].realization += row.realization_qty || 0;
     });
 
-    // Sort by INDICATOR_ORDER
-    return INDICATOR_ORDER.filter((name) => indicatorData[name]).map(
+    // Sort by program-specific INDICATOR_ORDER (dinamis)
+    return programIndicators.order.filter((name) => indicatorData[name]).map(
       (name, idx) => {
         const d = indicatorData[name];
         const metrics = calculateMetrics(d.target, d.realization);
@@ -192,7 +195,7 @@ export default function LaporanPage() {
         };
       },
     );
-  }, [data, isRecapView]);
+  }, [data, isRecapView, programIndicators]);
 
   // Prepare RECAP report data (all puskesmas)
   const recapReportData = useMemo(() => {
@@ -273,7 +276,7 @@ export default function LaporanPage() {
 
       const headerRows = [
         ["LAPORAN CAPAIAN STANDAR PELAYANAN MINIMAL (SPM)"],
-        ["BIDANG KESEHATAN"],
+        [`PROGRAM: ${programConfig.label.toUpperCase()}`],
         ["DINAS KESEHATAN KABUPATEN MOROWALI UTARA"],
         [""],
         [`PERIODE: ${getPeriodLabel()}`],
@@ -379,9 +382,10 @@ export default function LaporanPage() {
         isRecapView ? "Rekap Kabupaten" : "Laporan Detail",
       );
 
+      // Filename dengan program type
       const filename = isRecapView
-        ? `Rekap_SPM_Kabupaten_${selectedPeriod}.xlsx`
-        : `Laporan_SPM_${selectedPuskesmas}_${selectedPeriod}.xlsx`;
+        ? `Rekap_SPM_${selectedProgramType}_Kabupaten_${selectedPeriod}.xlsx`
+        : `Laporan_SPM_${selectedProgramType}_${selectedPuskesmas}_${selectedPeriod}.xlsx`;
 
       XLSX.writeFile(wb, filename);
     } catch (err) {
@@ -427,19 +431,19 @@ export default function LaporanPage() {
       doc.setLineWidth(0.3);
       doc.line(14, 30, pageWidth - 14, 30);
 
-      // Title with Period
+      // Title with Period and Program
       doc.setFontSize(12);
       doc.setFont("helvetica", "bold");
       if (isRecapView) {
         doc.text(
-          "REKAPITULASI CAPAIAN SPM SELURUH PUSKESMAS",
+          `REKAPITULASI CAPAIAN ${programConfig.label.toUpperCase()} SELURUH PUSKESMAS`,
           pageWidth / 2,
           38,
           { align: "center" },
         );
       } else {
         doc.text(
-          `LAPORAN CAPAIAN SPM PUSKESMAS ${getSelectedPuskesmasName().toUpperCase()}`,
+          `LAPORAN CAPAIAN ${programConfig.label.toUpperCase()} PUSKESMAS ${getSelectedPuskesmasName().toUpperCase()}`,
           pageWidth / 2,
           38,
           { align: "center" },
@@ -600,9 +604,10 @@ export default function LaporanPage() {
       doc.text("_________________________", pageWidth - 80, footerY + 45);
       doc.text("NIP.", pageWidth - 80, footerY + 50);
 
+      // Filename dengan program type
       const filename = isRecapView
-        ? `Rekap_SPM_Kabupaten_${selectedPeriod}.pdf`
-        : `Laporan_SPM_${selectedPuskesmas}_${selectedPeriod}.pdf`;
+        ? `Rekap_SPM_${selectedProgramType}_Kabupaten_${selectedPeriod}.pdf`
+        : `Laporan_SPM_${selectedProgramType}_${selectedPuskesmas}_${selectedPeriod}.pdf`;
 
       doc.save(filename);
     } catch (err) {
@@ -638,11 +643,46 @@ export default function LaporanPage() {
           </div>
         </div>
 
+        {/* Program Type TAB Selector */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="px-6 py-3 bg-slate-50 border-b border-slate-200">
+            <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">
+              Pilih Jenis Layanan SPM
+            </h2>
+          </div>
+          <div className="flex">
+            {PROGRAM_TYPES_LIST.map((program) => {
+              const isActive = selectedProgramType === program.value;
+              const theme = program.theme;
+              return (
+                <button
+                  key={program.value}
+                  onClick={() => setSelectedProgramType(program.value)}
+                  className={`flex-1 px-6 py-4 text-center transition-all border-b-4 ${
+                    isActive
+                      ? `${theme.bgLight} ${theme.textDark} ${theme.borderDark} font-bold`
+                      : "bg-white text-slate-600 border-transparent hover:bg-slate-50"
+                  }`}
+                >
+                  <span className="text-xl mr-2">{program.icon}</span>
+                  <span className="text-sm md:text-base">{program.shortLabel}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Filters */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-          <h2 className="text-lg font-semibold text-slate-800 mb-4">
-            Filter Laporan
-          </h2>
+          <div className="flex items-center gap-3 mb-4">
+            <span className="text-2xl">{programConfig.icon}</span>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-800">
+                Filter Laporan - {programConfig.label}
+              </h2>
+              <p className="text-sm text-slate-500">{programConfig.description}</p>
+            </div>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Period - Dropdown Triwulan */}
             <div>

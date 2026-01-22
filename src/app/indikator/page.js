@@ -1,211 +1,246 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell,
+} from "recharts";
 import DashboardLayout from "@/components/DashboardLayout";
 import { supabase } from "@/lib/supabase";
+import {
+  generateTriwulanOptions,
+  getCurrentPeriod,
+  parsePeriod,
+  isAnnualPeriod,
+  getQuartersForYear,
+  formatPeriodLabel,
+} from "@/utils/periods";
+import {
+  PROGRAMS,
+  PROGRAM_TYPES,
+  PROGRAM_TYPES_LIST,
+  getAllIndicators,
+  isPartAIndicator,
+} from "@/utils/constants";
 
+/**
+ * HALAMAN ANALISA PER INDIKATOR - "Mikroskop Data"
+ * Melihat ketersediaan satu indikator di SELURUH Puskesmas
+ */
 export default function IndikatorPage() {
-  const [data, setData] = useState([]);
+  // State
   const [loading, setLoading] = useState(true);
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
+  const [loadingData, setLoadingData] = useState(false);
+  const [rawData, setRawData] = useState([]);
+  const [puskesmasMaster, setPuskesmasMaster] = useState([]);
+  
+  // Filters
+  const [selectedProgram, setSelectedProgram] = useState(PROGRAM_TYPES.HIPERTENSI);
+  const [selectedIndicator, setSelectedIndicator] = useState("");
+  const [selectedPeriod, setSelectedPeriod] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortConfig, setSortConfig] = useState({ key: "gap", direction: "desc" });
 
+  const periodOptions = useMemo(() => generateTriwulanOptions(), []);
+
+  // Get indicator options based on selected program
+  const indicatorOptions = useMemo(() => {
+    return getAllIndicators(selectedProgram);
+  }, [selectedProgram]);
+
+  // Initialize
   useEffect(() => {
-    fetchData();
-  }, []);
-
-  async function fetchData() {
-    try {
-      const { data: result, error } = await supabase
-        .from("achievements")
-        .select("*")
-        .order("indicator_name", { ascending: true });
-
-      if (error) throw error;
-      setData(result || []);
-    } catch (err) {
-      console.error("Error fetching data:", err);
-    } finally {
+    async function init() {
+      const { data: pkm } = await supabase.from("puskesmas").select("*").order("name");
+      setPuskesmasMaster(pkm || []);
+      setSelectedPeriod(getCurrentPeriod());
       setLoading(false);
     }
-  }
+    init();
+  }, []);
 
-  // Group data by indicator (excluding KAB to avoid double counting)
-  const indicatorData = useMemo(() => {
-    const grouped = data
-      .filter((d) => d.puskesmas_code !== "KAB")
-      .reduce((acc, curr) => {
-        if (!acc[curr.indicator_name]) {
-          acc[curr.indicator_name] = {
-            indicator_name: curr.indicator_name,
-            total_target: 0,
-            total_realization: 0,
-          };
+  // Set default indicator when program changes
+  useEffect(() => {
+    if (indicatorOptions.length > 0 && !indicatorOptions.includes(selectedIndicator)) {
+      setSelectedIndicator(indicatorOptions[0]);
+    }
+  }, [selectedProgram, indicatorOptions, selectedIndicator]);
+
+  // Fetch data when filters change
+  useEffect(() => {
+    async function fetchData() {
+      if (!selectedPeriod || !selectedIndicator) return;
+
+      try {
+        setLoadingData(true);
+
+        let query = supabase
+          .from("achievements")
+          .select("*")
+          .eq("program_type", selectedProgram)
+          .eq("indicator_name", selectedIndicator)
+          .neq("puskesmas_code", "KAB");
+
+        if (isAnnualPeriod(selectedPeriod)) {
+          const parsed = parsePeriod(selectedPeriod);
+          const quarters = getQuartersForYear(parsed.year);
+          query = query.in("period", quarters);
+        } else {
+          query = query.eq("period", selectedPeriod);
         }
-        acc[curr.indicator_name].total_target +=
-          parseFloat(curr.target_qty) || 0;
-        acc[curr.indicator_name].total_realization +=
-          parseFloat(curr.realization_qty) || 0;
-        return acc;
-      }, {});
 
-    return Object.values(grouped).map((item, index) => ({
-      ...item,
-      no: index + 1,
-      satuan: "Orang",
-      percentage:
-        item.total_target > 0
-          ? ((item.total_realization / item.total_target) * 100).toFixed(1)
-          : 0,
-      status:
-        item.total_target > 0 && item.total_realization >= item.total_target
-          ? "Tuntas"
-          : "Belum Tuntas",
-    }));
-  }, [data]);
-
-  // Sorting logic
-  const sortedData = useMemo(() => {
-    if (!sortConfig.key) return indicatorData;
-
-    return [...indicatorData].sort((a, b) => {
-      let aValue = a[sortConfig.key];
-      let bValue = b[sortConfig.key];
-
-      // Handle percentage as number
-      if (sortConfig.key === "percentage") {
-        aValue = parseFloat(aValue);
-        bValue = parseFloat(bValue);
+        const { data, error } = await query;
+        if (error) throw error;
+        setRawData(data || []);
+      } catch (err) {
+        console.error("Error fetching indicator data:", err);
+      } finally {
+        setLoadingData(false);
       }
+    }
 
-      if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1;
-      if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1;
-      return 0;
+    fetchData();
+  }, [selectedProgram, selectedIndicator, selectedPeriod]);
+
+  // Process data per Puskesmas
+  const processedData = useMemo(() => {
+    const pkmMap = {};
+
+    rawData.forEach((row) => {
+      if (!pkmMap[row.puskesmas_code]) {
+        pkmMap[row.puskesmas_code] = {
+          code: row.puskesmas_code,
+          target: 0,
+          realization: 0,
+        };
+      }
+      pkmMap[row.puskesmas_code].target += parseFloat(row.target_qty) || 0;
+      pkmMap[row.puskesmas_code].realization += parseFloat(row.realization_qty) || 0;
     });
-  }, [indicatorData, sortConfig]);
 
+    return Object.values(pkmMap).map((p) => {
+      const pkm = puskesmasMaster.find((m) => m.code === p.code);
+      const gap = Math.max(0, p.target - p.realization);
+      const percentage = p.target > 0 ? ((p.realization / p.target) * 100) : null;
+      
+      return {
+        ...p,
+        name: pkm?.name || p.code,
+        gap,
+        percentage: percentage !== null ? parseFloat(percentage.toFixed(1)) : null,
+      };
+    });
+  }, [rawData, puskesmasMaster]);
+
+  // Filter and sort
+  const filteredAndSortedData = useMemo(() => {
+    let filtered = processedData;
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (p) => p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q)
+      );
+    }
+
+    return [...filtered].sort((a, b) => {
+      const aVal = a[sortConfig.key] ?? -1;
+      const bVal = b[sortConfig.key] ?? -1;
+      if (sortConfig.key === "name") {
+        return sortConfig.direction === "asc"
+          ? a.name.localeCompare(b.name, "id")
+          : b.name.localeCompare(a.name, "id");
+      }
+      return sortConfig.direction === "asc" ? aVal - bVal : bVal - aVal;
+    });
+  }, [processedData, searchQuery, sortConfig]);
+
+  // Summary stats
+  const summary = useMemo(() => {
+    const totalTarget = processedData.reduce((sum, p) => sum + p.target, 0);
+    const totalRealization = processedData.reduce((sum, p) => sum + p.realization, 0);
+    const totalGap = processedData.reduce((sum, p) => sum + p.gap, 0);
+    const avgPercentage = totalTarget > 0 ? ((totalRealization / totalTarget) * 100).toFixed(1) : "N/A";
+    const pkmWithGap = processedData.filter((p) => p.gap > 0).length;
+    const pkmComplete = processedData.filter((p) => p.percentage !== null && p.percentage >= 100).length;
+
+    return { totalTarget, totalRealization, totalGap, avgPercentage, pkmWithGap, pkmComplete, total: processedData.length };
+  }, [processedData]);
+
+  // Chart data - sorted by worst first
+  const chartData = useMemo(() => {
+    return [...processedData]
+      .filter((p) => p.target > 0)
+      .sort((a, b) => (b.percentage ?? 0) - (a.percentage ?? 0));
+  }, [processedData]);
+
+  // Handlers
   const handleSort = (key) => {
     setSortConfig((prev) => ({
       key,
-      direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc",
+      direction: prev.key === key && prev.direction === "desc" ? "asc" : "desc",
     }));
   };
 
-  // Summary Statistics
-  const summary = useMemo(() => {
-    const totalTarget = indicatorData.reduce(
-      (sum, d) => sum + d.total_target,
-      0,
-    );
-    const totalRealization = indicatorData.reduce(
-      (sum, d) => sum + d.total_realization,
-      0,
-    );
-    const completedCount = indicatorData.filter(
-      (d) => d.status === "Tuntas",
-    ).length;
+  // Get current program config
+  const programConfig = PROGRAMS[selectedProgram];
+  const theme = programConfig.theme;
+  const isPartA = isPartAIndicator(selectedProgram, selectedIndicator);
 
-    return {
-      totalIndicators: indicatorData.length,
-      totalTarget,
-      totalRealization,
-      completedCount,
-      overallPercentage:
-        totalTarget > 0
-          ? ((totalRealization / totalTarget) * 100).toFixed(1)
-          : 0,
-    };
-  }, [indicatorData]);
-
-  // Get progress bar color based on percentage
-  const getProgressColor = (percentage) => {
-    const pct = parseFloat(percentage);
-    if (pct >= 100) return "bg-emerald-500";
-    if (pct >= 75) return "bg-blue-500";
-    if (pct >= 50) return "bg-amber-500";
-    return "bg-rose-500";
+  // Color for percentage
+  const getPercentageColor = (pct) => {
+    if (pct === null) return { bg: "bg-gray-100", text: "text-gray-500", bar: "#9ca3af" };
+    if (pct >= 100) return { bg: "bg-emerald-100", text: "text-emerald-800", bar: "#10b981" };
+    if (pct >= 80) return { bg: "bg-emerald-50", text: "text-emerald-700", bar: "#34d399" };
+    if (pct >= 50) return { bg: "bg-amber-100", text: "text-amber-800", bar: "#f59e0b" };
+    return { bg: "bg-red-100", text: "text-red-800", bar: "#ef4444" };
   };
 
-  // Sort indicator
-  const SortIndicator = ({ columnKey }) => {
-    if (sortConfig.key !== columnKey) {
+  // Sort icon
+  const SortIcon = ({ columnKey }) => {
+    if (sortConfig.key !== columnKey) return <span className="text-gray-400 ml-1">↕</span>;
+    return <span className="text-yellow-400 ml-1">{sortConfig.direction === "asc" ? "↑" : "↓"}</span>;
+  };
+
+  // Custom tooltip
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      const d = payload[0].payload;
       return (
-        <svg
-          className="w-4 h-4 text-gray-400 ml-1"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
-          />
-        </svg>
+        <div className="bg-white p-4 rounded-xl shadow-xl border border-gray-200 text-sm">
+          <p className="font-bold text-gray-800 mb-2">{d.name}</p>
+          <div className="space-y-1">
+            <p>Kebutuhan (Target): <span className="font-semibold">{d.target.toLocaleString("id-ID")}</span></p>
+            <p>Ketersediaan (Realisasi): <span className="font-semibold text-emerald-600">{d.realization.toLocaleString("id-ID")}</span></p>
+            <p>Kekurangan (Gap): <span className={`font-semibold ${d.gap > 0 ? "text-red-600" : "text-emerald-600"}`}>{d.gap.toLocaleString("id-ID")}</span></p>
+            <p className="pt-2 border-t mt-2">
+              % Terpenuhi: <span className={`font-bold ${d.percentage >= 100 ? "text-emerald-600" : d.percentage >= 50 ? "text-amber-600" : "text-red-600"}`}>
+                {d.percentage !== null ? `${d.percentage}%` : "N/A"}
+              </span>
+            </p>
+          </div>
+        </div>
       );
     }
-    return sortConfig.direction === "asc" ? (
-      <svg
-        className="w-4 h-4 text-emerald-600 ml-1"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M5 15l7-7 7 7"
-        />
-      </svg>
-    ) : (
-      <svg
-        className="w-4 h-4 text-emerald-600 ml-1"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M19 9l-7 7-7-7"
-        />
-      </svg>
-    );
+    return null;
   };
 
-  // Loading Skeleton
+  // Format percentage display
+  const formatPercentage = (pct) => {
+    if (pct === null) return "N/A";
+    return `${pct}%`;
+  };
+
   if (loading) {
     return (
       <DashboardLayout>
-        <div className="p-6 bg-gray-50 min-h-screen">
-          <div className="max-w-7xl mx-auto">
-            <div className="animate-pulse">
-              <div className="h-8 bg-gray-200 rounded w-72 mb-2"></div>
-              <div className="h-4 bg-gray-100 rounded w-96 mb-6"></div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                {[...Array(4)].map((_, i) => (
-                  <div
-                    key={i}
-                    className="bg-white p-5 rounded-xl shadow-sm border border-gray-100"
-                  >
-                    <div className="h-4 bg-gray-100 rounded w-24 mb-3"></div>
-                    <div className="h-8 bg-gray-200 rounded w-20"></div>
-                  </div>
-                ))}
-              </div>
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-                <div className="p-4 border-b border-gray-100">
-                  <div className="h-5 bg-gray-200 rounded w-48"></div>
-                </div>
-                <div className="p-4">
-                  {[...Array(5)].map((_, i) => (
-                    <div key={i} className="h-12 bg-gray-50 rounded mb-2"></div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
         </div>
       </DashboardLayout>
     );
@@ -214,252 +249,341 @@ export default function IndikatorPage() {
   return (
     <DashboardLayout>
       <div className="p-6 bg-gray-50 min-h-screen">
-        <div className="max-w-7xl mx-auto">
-          {/* Header */}
-          <div className="mb-6">
-            <h1 className="text-2xl font-bold text-gray-800">
-              Capaian Per Indikator
-            </h1>
-            <p className="text-gray-500 mt-1">
-              Detail capaian berdasarkan indikator SPM Hipertensi
-            </p>
-          </div>
-
-          {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
-              <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">
-                Jumlah Indikator
-              </p>
-              <p className="text-2xl font-bold text-slate-700 mt-2">
-                {summary.totalIndicators}
-              </p>
-            </div>
-            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
-              <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">
-                Total Sasaran
-              </p>
-              <p className="text-2xl font-bold text-slate-700 mt-2">
-                {summary.totalTarget.toLocaleString("id-ID")}
-              </p>
-            </div>
-            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
-              <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">
-                Total Realisasi
-              </p>
-              <p className="text-2xl font-bold text-emerald-600 mt-2">
-                {summary.totalRealization.toLocaleString("id-ID")}
-              </p>
-            </div>
-            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
-              <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">
-                Indikator Tuntas
-              </p>
-              <p className="text-2xl font-bold text-emerald-600 mt-2">
-                {summary.completedCount} / {summary.totalIndicators}
-              </p>
-            </div>
-          </div>
-
-          {/* Table */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+        <div className="max-w-full mx-auto space-y-6">
+          {/* ============================================ */}
+          {/* HEADER & FILTERS */}
+          {/* ============================================ */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
               <div>
-                <h2 className="text-lg font-semibold text-gray-800">
-                  Tabel Capaian Indikator
-                </h2>
-                <p className="text-sm text-gray-500">
-                  Klik header kolom untuk mengurutkan data
+                <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
+                  🔬 Analisa Per Indikator
+                </h1>
+                <p className="text-gray-500 mt-1">
+                  Lihat ketersediaan satu indikator di SELURUH Puskesmas
                 </p>
               </div>
-              <div className="flex items-center gap-4 text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-emerald-500 rounded-full"></div>
-                  <span className="text-gray-600">≥100%</span>
+
+              {/* Filter Controls */}
+              <div className="flex flex-wrap items-end gap-4">
+                {/* Program Filter */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Program SPM</label>
+                  <select
+                    value={selectedProgram}
+                    onChange={(e) => setSelectedProgram(e.target.value)}
+                    className="px-4 py-2 border border-gray-300 rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500 min-w-[180px]"
+                  >
+                    {PROGRAM_TYPES_LIST.map((p) => (
+                      <option key={p.value} value={p.value}>
+                        {p.icon} {p.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                  <span className="text-gray-600">≥75%</span>
+
+                {/* Indicator Filter */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Nama Indikator</label>
+                  <select
+                    value={selectedIndicator}
+                    onChange={(e) => setSelectedIndicator(e.target.value)}
+                    className="px-4 py-2 border border-gray-300 rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500 min-w-[300px] max-w-[400px]"
+                  >
+                    {indicatorOptions.map((ind) => (
+                      <option key={ind} value={ind}>
+                        {ind}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
-                  <span className="text-gray-600">≥50%</span>
+
+                {/* Period Filter */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Periode</label>
+                  <select
+                    value={selectedPeriod}
+                    onChange={(e) => setSelectedPeriod(e.target.value)}
+                    className="px-4 py-2 border border-gray-300 rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500 min-w-[180px]"
+                  >
+                    {periodOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-rose-500 rounded-full"></div>
-                  <span className="text-gray-600">&lt;50%</span>
+
+                {loadingData && (
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                )}
+              </div>
+            </div>
+
+            {/* Selected Indicator Info */}
+            <div className={`mt-6 p-4 rounded-xl ${theme.bgLighter} border ${theme.border}`}>
+              <div className="flex items-center gap-3">
+                <span className="text-3xl">{programConfig.icon}</span>
+                <div>
+                  <h2 className={`text-xl font-bold ${theme.textDark}`}>
+                    {selectedIndicator || "Pilih Indikator"}
+                  </h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${isPartA ? "bg-blue-100 text-blue-800" : "bg-slate-200 text-slate-700"}`}>
+                      {isPartA ? "📊 Bagian A: Sasaran Manusia" : "🔧 Bagian B: Sumber Daya (Barang/Jasa/SDM)"}
+                    </span>
+                    <span className="ml-2">• Periode: <strong>{formatPeriodLabel(selectedPeriod)}</strong></span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ============================================ */}
+          {/* SUMMARY CARDS */}
+          {/* ============================================ */}
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+              <p className="text-xs font-medium text-gray-500 uppercase">Total Kebutuhan</p>
+              <p className="text-2xl font-bold text-slate-700 mt-1">{summary.totalTarget.toLocaleString("id-ID")}</p>
+            </div>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+              <p className="text-xs font-medium text-gray-500 uppercase">Total Tersedia</p>
+              <p className="text-2xl font-bold text-emerald-600 mt-1">{summary.totalRealization.toLocaleString("id-ID")}</p>
+            </div>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+              <p className="text-xs font-medium text-gray-500 uppercase">Total Kekurangan</p>
+              <p className={`text-2xl font-bold mt-1 ${summary.totalGap > 0 ? "text-red-600" : "text-emerald-600"}`}>
+                {summary.totalGap.toLocaleString("id-ID")}
+              </p>
+            </div>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+              <p className="text-xs font-medium text-gray-500 uppercase">Rata-rata Capaian</p>
+              <p className={`text-2xl font-bold mt-1 ${parseFloat(summary.avgPercentage) >= 100 ? "text-emerald-600" : "text-amber-600"}`}>
+                {summary.avgPercentage === "N/A" ? "N/A" : `${summary.avgPercentage}%`}
+              </p>
+            </div>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+              <p className="text-xs font-medium text-gray-500 uppercase">PKM Terpenuhi</p>
+              <p className="text-2xl font-bold text-emerald-600 mt-1">{summary.pkmComplete} <span className="text-sm text-gray-400">/ {summary.total}</span></p>
+            </div>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+              <p className="text-xs font-medium text-gray-500 uppercase">PKM Kekurangan</p>
+              <p className={`text-2xl font-bold mt-1 ${summary.pkmWithGap > 0 ? "text-red-600" : "text-emerald-600"}`}>
+                {summary.pkmWithGap} <span className="text-sm text-gray-400">/ {summary.total}</span>
+              </p>
+            </div>
+          </div>
+
+          {/* ============================================ */}
+          {/* BAR CHART - Perbandingan Semua Puskesmas */}
+          {/* ============================================ */}
+          {chartData.length > 0 && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+                <h2 className="text-lg font-bold text-gray-800">
+                  📊 Perbandingan Ketersediaan di Seluruh Puskesmas
+                </h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  Visualisasi % terpenuhi per Puskesmas untuk indikator: <strong>{selectedIndicator}</strong>
+                </p>
+              </div>
+              <div className="p-4">
+                <div style={{ height: Math.max(300, chartData.length * 40), minWidth: 600 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={chartData}
+                      layout="vertical"
+                      margin={{ top: 10, right: 60, left: 120, bottom: 10 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e5e7eb" />
+                      <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: "#6b7280" }} tickFormatter={(v) => `${v}%`} />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "#374151" }} width={110} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Bar dataKey="percentage" radius={[0, 4, 4, 0]} maxBarSize={25}>
+                        {chartData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={getPercentageColor(entry.percentage).bar} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ============================================ */}
+          {/* DETAIL TABLE */}
+          {/* ============================================ */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-6 py-4 bg-slate-800 text-white">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-bold">📋 Tabel Detail Per Puskesmas</h2>
+                  <p className="text-slate-300 text-sm mt-1">
+                    Klik header untuk mengurutkan • Total {filteredAndSortedData.length} Puskesmas
+                  </p>
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Cari Puskesmas..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:ring-2 focus:ring-blue-500 w-64"
+                  />
+                  <svg className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
                 </div>
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-gray-200">
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 w-16">
-                      No
-                    </th>
-                    <th
-                      className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-slate-100 transition-colors"
-                      onClick={() => handleSort("indicator_name")}
+            {/* Color Legend */}
+            <div className="px-6 py-3 bg-gray-50 border-b border-gray-200 flex flex-wrap items-center gap-4 text-sm">
+              <span className="font-medium text-gray-700">Legenda Warna:</span>
+              <span className="flex items-center gap-1">
+                <span className="w-4 h-4 rounded bg-emerald-100 border border-emerald-300"></span>
+                ≥100% (Terpenuhi)
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-4 h-4 rounded bg-emerald-50 border border-emerald-200"></span>
+                80-99%
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-4 h-4 rounded bg-amber-100 border border-amber-300"></span>
+                50-79%
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-4 h-4 rounded bg-red-100 border border-red-300"></span>
+                &lt;50%
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-4 h-4 rounded bg-gray-100 border border-gray-300"></span>
+                N/A
+              </span>
+            </div>
+
+            <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+              <table className="w-full">
+                <thead className="sticky top-0 z-10">
+                  <tr className="bg-slate-700 text-white">
+                    <th className="px-4 py-3 text-center text-sm font-semibold w-14">#</th>
+                    <th 
+                      className="px-4 py-3 text-left text-sm font-semibold cursor-pointer hover:bg-slate-600 transition-colors"
+                      onClick={() => handleSort("name")}
                     >
-                      <div className="flex items-center">
-                        Indikator
-                        <SortIndicator columnKey="indicator_name" />
-                      </div>
+                      Puskesmas <SortIcon columnKey="name" />
                     </th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700 w-24">
-                      Satuan
-                    </th>
-                    <th
-                      className="px-4 py-3 text-right font-semibold text-gray-700 cursor-pointer hover:bg-slate-100 transition-colors w-32"
-                      onClick={() => handleSort("total_target")}
+                    <th 
+                      className="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-slate-600 transition-colors min-w-[140px]"
+                      onClick={() => handleSort("target")}
                     >
-                      <div className="flex items-center justify-end">
-                        Total Target
-                        <SortIndicator columnKey="total_target" />
-                      </div>
+                      Kebutuhan (Target) <SortIcon columnKey="target" />
                     </th>
-                    <th
-                      className="px-4 py-3 text-right font-semibold text-gray-700 cursor-pointer hover:bg-slate-100 transition-colors w-32"
-                      onClick={() => handleSort("total_realization")}
+                    <th 
+                      className="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-slate-600 transition-colors min-w-[160px]"
+                      onClick={() => handleSort("realization")}
                     >
-                      <div className="flex items-center justify-end">
-                        Total Realisasi
-                        <SortIndicator columnKey="total_realization" />
-                      </div>
+                      Ketersediaan (Realisasi) <SortIcon columnKey="realization" />
                     </th>
-                    <th
-                      className="px-4 py-3 text-center font-semibold text-gray-700 cursor-pointer hover:bg-slate-100 transition-colors w-48"
+                    <th 
+                      className="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-slate-600 transition-colors min-w-[140px]"
+                      onClick={() => handleSort("gap")}
+                    >
+                      Gap (Kekurangan) <SortIcon columnKey="gap" />
+                    </th>
+                    <th 
+                      className="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-slate-600 transition-colors min-w-[120px]"
                       onClick={() => handleSort("percentage")}
                     >
-                      <div className="flex items-center justify-center">
-                        % Capaian
-                        <SortIndicator columnKey="percentage" />
-                      </div>
+                      % Terpenuhi <SortIcon columnKey="percentage" />
                     </th>
-                    <th
-                      className="px-4 py-3 text-center font-semibold text-gray-700 cursor-pointer hover:bg-slate-100 transition-colors w-28"
-                      onClick={() => handleSort("status")}
-                    >
-                      <div className="flex items-center justify-center">
-                        Status
-                        <SortIndicator columnKey="status" />
-                      </div>
-                    </th>
+                    <th className="px-4 py-3 text-center text-sm font-semibold min-w-[100px]">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedData.map((item, idx) => (
-                    <tr
-                      key={item.indicator_name}
-                      className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${
-                        idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"
-                      }`}
-                    >
-                      <td className="px-4 py-3 text-gray-600">{idx + 1}</td>
-                      <td className="px-4 py-3 text-gray-800 font-medium">
-                        {item.indicator_name}
-                      </td>
-                      <td className="px-4 py-3 text-center text-gray-600">
-                        {item.satuan}
-                      </td>
-                      <td className="px-4 py-3 text-right text-gray-800 tabular-nums">
-                        {item.total_target.toLocaleString("id-ID")}
-                      </td>
-                      <td className="px-4 py-3 text-right text-gray-800 tabular-nums">
-                        {item.total_realization.toLocaleString("id-ID")}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="flex-1 bg-gray-100 rounded-full h-2.5 overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all duration-500 ${getProgressColor(item.percentage)}`}
-                              style={{
-                                width: `${Math.min(parseFloat(item.percentage), 100)}%`,
-                              }}
-                            ></div>
-                          </div>
-                          <span
-                            className={`text-sm font-semibold tabular-nums w-14 text-right ${
-                              parseFloat(item.percentage) >= 100
-                                ? "text-emerald-600"
-                                : "text-gray-700"
-                            }`}
-                          >
-                            {item.percentage}%
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
-                            item.status === "Tuntas"
-                              ? "bg-emerald-100 text-emerald-700"
-                              : "bg-rose-100 text-rose-700"
-                          }`}
-                        >
-                          {item.status === "Tuntas" ? (
-                            <svg
-                              className="w-3.5 h-3.5 mr-1"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M5 13l4 4L19 7"
-                              />
-                            </svg>
-                          ) : (
-                            <svg
-                              className="w-3.5 h-3.5 mr-1"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                              />
-                            </svg>
-                          )}
-                          {item.status}
-                        </span>
+                  {filteredAndSortedData.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                        {searchQuery ? `Tidak ada Puskesmas dengan nama "${searchQuery}"` : "Tidak ada data untuk filter ini"}
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    filteredAndSortedData.map((pkm, idx) => {
+                      const color = getPercentageColor(pkm.percentage);
+                      const isLowPerformer = pkm.percentage !== null && pkm.percentage < 50;
+                      return (
+                        <tr
+                          key={pkm.code}
+                          className={`
+                            border-b border-gray-100 transition-colors
+                            ${idx % 2 === 0 ? "bg-white" : "bg-gray-50"}
+                            ${isLowPerformer ? "!bg-red-50/50" : ""}
+                            hover:bg-blue-50
+                          `}
+                        >
+                          <td className="px-4 py-3 text-center text-sm text-gray-500 font-medium">{idx + 1}</td>
+                          <td className="px-4 py-3">
+                            <p className="font-semibold text-gray-800">{pkm.name}</p>
+                            <p className="text-xs text-gray-500">{pkm.code}</p>
+                          </td>
+                          <td className="px-4 py-3 text-center text-sm font-semibold text-gray-800 tabular-nums">
+                            {pkm.target.toLocaleString("id-ID")}
+                          </td>
+                          <td className="px-4 py-3 text-center text-sm font-semibold text-emerald-600 tabular-nums">
+                            {pkm.realization.toLocaleString("id-ID")}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={`font-semibold tabular-nums ${pkm.gap > 0 ? "text-red-600" : "text-emerald-600"}`}>
+                              {pkm.gap > 0 ? `-${pkm.gap.toLocaleString("id-ID")}` : "0"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={`inline-block px-3 py-1 rounded-lg font-bold text-sm ${color.bg} ${color.text}`}>
+                              {formatPercentage(pkm.percentage)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {pkm.percentage === null ? (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-600">— N/A</span>
+                            ) : pkm.percentage >= 100 ? (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">✓ CUKUP</span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800">✗ KURANG</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
 
             {/* Table Footer */}
-            <div className="p-4 bg-slate-50 border-t border-gray-200">
-              <div className="flex items-center justify-between text-sm text-gray-600">
-                <span>Menampilkan {sortedData.length} indikator</span>
-                <span className="font-medium">
-                  Rata-rata Capaian:{" "}
-                  <span
-                    className={
-                      parseFloat(summary.overallPercentage) >= 100
-                        ? "text-emerald-600"
-                        : "text-amber-600"
-                    }
-                  >
-                    {summary.overallPercentage}%
-                  </span>
-                </span>
+            {filteredAndSortedData.length > 0 && (
+              <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
+                <div className="flex flex-wrap items-center justify-between gap-4 text-sm">
+                  <div className="flex items-center gap-6">
+                    <span className="text-gray-600">
+                      <strong className="text-emerald-600">{summary.pkmComplete}</strong> Puskesmas terpenuhi (≥100%)
+                    </span>
+                    <span className="text-gray-600">
+                      <strong className="text-red-600">{summary.pkmWithGap}</strong> Puskesmas kekurangan
+                    </span>
+                  </div>
+                  <p className="text-gray-500">
+                    Total: <strong>{filteredAndSortedData.length}</strong> Puskesmas
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Footer */}
-          <div className="mt-6 text-center text-xs text-gray-400">
-            Data diperbarui secara realtime dari Google Sheets dan Supabase
+          <div className="text-center text-xs text-gray-400 py-4">
+            Data diperbarui secara realtime dari Supabase • Dinas Kesehatan Kab. Morowali Utara
           </div>
         </div>
       </div>

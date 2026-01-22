@@ -10,45 +10,14 @@ import {
   getCurrentPeriod,
   formatPeriodLabel,
 } from "@/utils/periods";
-
-// STRICT INDICATOR ORDER - Sesuai Excel
-const INDICATOR_ORDER = [
-  "JUMLAH YANG HARUS DILAYANI",
-  "Pedoman pengendalian Hipertensi dan media Komunikasi, Informasi, Edukasi (KIE)",
-  "Media Promosi Kesehatan",
-  "Obat Hipertensi",
-  "Tensimeter",
-  "Formulir pencatatan dan pelaporan Aplikasi Sehat Indonesiaku (ASIK)",
-  "Tenaga Medis : Dokter",
-  "Tenaga Kesehatan : Bidan",
-  "Tenaga Kesehatan : Perawat",
-  "Tenaga Kesehatan : Tenaga Gizi",
-  "Tenaga Kesehatan : Tenaga Promosi Kesehatan dan Ilmu Perilaku",
-  "Tenaga Kesehatan : Tenaga Kefarmasian",
-  "Tenaga Kesehatan : Tenaga Kesehatan Masyarakat",
-];
-
-// Section A - Penerimaan Layanan
-const SECTION_A_INDICATORS = ["JUMLAH YANG HARUS DILAYANI"];
-
-// Section B - Mutu Minimal - Grouped
-const SECTION_B_BARANG_JASA = [
-  "Pedoman pengendalian Hipertensi dan media Komunikasi, Informasi, Edukasi (KIE)",
-  "Media Promosi Kesehatan",
-  "Obat Hipertensi",
-  "Tensimeter",
-  "Formulir pencatatan dan pelaporan Aplikasi Sehat Indonesiaku (ASIK)",
-];
-
-const SECTION_B_SDM = [
-  "Tenaga Medis : Dokter",
-  "Tenaga Kesehatan : Bidan",
-  "Tenaga Kesehatan : Perawat",
-  "Tenaga Kesehatan : Tenaga Gizi",
-  "Tenaga Kesehatan : Tenaga Promosi Kesehatan dan Ilmu Perilaku",
-  "Tenaga Kesehatan : Tenaga Kefarmasian",
-  "Tenaga Kesehatan : Tenaga Kesehatan Masyarakat",
-];
+import { 
+  PROGRAM_TYPES, 
+  PROGRAM_TYPES_LIST, 
+  isValidProgramType, 
+  getProgramLabel,
+  getIndicatorsForProgram,
+  getProgram
+} from "@/utils/constants";
 
 export default function InputDataPage() {
   const router = useRouter();
@@ -81,12 +50,16 @@ export default function InputDataPage() {
   // Selected values
   const [selectedPuskesmas, setSelectedPuskesmas] = useState("");
   const [selectedPeriod, setSelectedPeriod] = useState("");
+  const [selectedProgramType, setSelectedProgramType] = useState(""); // BARU: Program Type
 
   // Form data - keyed by indicator_name
   const [formData, setFormData] = useState({});
 
   // Mode indicator
   const [isEditMode, setIsEditMode] = useState(false);
+
+  // Validation state untuk Program Type
+  const [programTypeError, setProgramTypeError] = useState(false);
 
   // Show toast notification
   const showToast = (message, type = "success") => {
@@ -139,44 +112,6 @@ export default function InputDataPage() {
         if (pkmError) throw pkmError;
         setPuskesmasList(pkmData || []);
 
-        // Fetch unique indicators with unit from DB
-        const { data: achData, error: achError } = await supabase
-          .from("achievements")
-          .select("indicator_name, unit")
-          .limit(100);
-
-        if (achError) throw achError;
-
-        // Get unique indicators with their units
-        const indicatorMap = {};
-        (achData || []).forEach((row) => {
-          if (row.indicator_name && !indicatorMap[row.indicator_name]) {
-            indicatorMap[row.indicator_name] = row.unit || "Orang";
-          }
-        });
-
-        // Sort indicators based on INDICATOR_ORDER
-        const sortedIndicators = INDICATOR_ORDER.filter(
-          (ind) => indicatorMap[ind] || true,
-        ) // Keep all from order list
-          .map((name) => ({
-            indicator_name: name,
-            unit: indicatorMap[name] || "Orang",
-          }));
-
-        setIndicators(sortedIndicators);
-
-        // Initialize empty form
-        const initialData = {};
-        sortedIndicators.forEach((ind) => {
-          initialData[ind.indicator_name] = {
-            target: 0,
-            realization: 0,
-            unit: ind.unit,
-          };
-        });
-        setFormData(initialData);
-
         // Set default period
         setSelectedPeriod(getCurrentPeriod());
 
@@ -201,11 +136,47 @@ export default function InputDataPage() {
     initPage();
   }, [router]);
 
-  // Load existing data when puskesmas or period changes
+  // Update indicators when programType changes
+  useEffect(() => {
+    if (!selectedProgramType || !isValidProgramType(selectedProgramType)) {
+      setIndicators([]);
+      setFormData({});
+      return;
+    }
+
+    // Get indicators from centralized config
+    const programConfig = getIndicatorsForProgram(selectedProgramType);
+    const sortedIndicators = programConfig.order.map((name) => ({
+      indicator_name: name,
+      unit: name === "JUMLAH YANG HARUS DILAYANI" ? "Orang" : "Paket",
+    }));
+
+    setIndicators(sortedIndicators);
+
+    // Initialize empty form
+    const initialData = {};
+    sortedIndicators.forEach((ind) => {
+      initialData[ind.indicator_name] = {
+        target: 0,
+        realization: 0,
+        unit: ind.unit,
+      };
+    });
+    setFormData(initialData);
+    setIsEditMode(false);
+  }, [selectedProgramType]);
+
+  // Load existing data when puskesmas, period, or programType changes
   useEffect(() => {
     async function loadExistingData() {
-      if (!selectedPuskesmas || !selectedPeriod || indicators.length === 0)
+      if (!selectedPuskesmas || !selectedPeriod || !selectedProgramType || indicators.length === 0)
         return;
+
+      // KEAMANAN: Validasi programType sebelum query
+      if (!isValidProgramType(selectedProgramType)) {
+        setError(`Program type tidak valid: ${selectedProgramType}`);
+        return;
+      }
 
       try {
         setLoadingData(true);
@@ -214,7 +185,8 @@ export default function InputDataPage() {
           .from("achievements")
           .select("*")
           .eq("puskesmas_code", selectedPuskesmas)
-          .eq("period", selectedPeriod);
+          .eq("period", selectedPeriod)
+          .eq("program_type", selectedProgramType); // FILTER BY PROGRAM TYPE
 
         if (achError) throw achError;
 
@@ -244,7 +216,7 @@ export default function InputDataPage() {
     }
 
     loadExistingData();
-  }, [selectedPuskesmas, selectedPeriod, indicators]);
+  }, [selectedPuskesmas, selectedPeriod, selectedProgramType, indicators]);
 
   // Handle input change
   const handleInputChange = useCallback((indicatorName, field, value) => {
@@ -260,16 +232,30 @@ export default function InputDataPage() {
 
   // Handle save (Upsert)
   const handleSave = async () => {
+    // VALIDASI: Cek Program Type terlebih dahulu
+    if (!selectedProgramType) {
+      setProgramTypeError(true);
+      showToast("Harap pilih Jenis Layanan terlebih dahulu!", "error");
+      return;
+    }
+
+    // KEAMANAN: Validasi ulang programType
+    if (!isValidProgramType(selectedProgramType)) {
+      showToast(`Program type tidak valid: ${selectedProgramType}. Gunakan dropdown yang tersedia.`, "error");
+      return;
+    }
+
     if (!selectedPuskesmas || !selectedPeriod) {
       showToast("Pilih Puskesmas dan Periode terlebih dahulu", "error");
       return;
     }
 
+    setProgramTypeError(false);
     setSaving(true);
     setError(null);
 
     try {
-      // Prepare upsert data
+      // Prepare upsert data dengan program_type
       const records = indicators.map((ind) => {
         const data = formData[ind.indicator_name] || {
           target: 0,
@@ -279,6 +265,7 @@ export default function InputDataPage() {
           puskesmas_code: selectedPuskesmas,
           indicator_name: ind.indicator_name,
           period: selectedPeriod,
+          program_type: selectedProgramType, // WAJIB: Program Type
           target_qty: data.target,
           realization_qty: data.realization,
           unit: data.unit || ind.unit || "Orang",
@@ -288,12 +275,12 @@ export default function InputDataPage() {
       const { error: upsertError } = await supabase
         .from("achievements")
         .upsert(records, {
-          onConflict: "puskesmas_code,indicator_name,period",
+          onConflict: "puskesmas_code,indicator_name,period,program_type",
         });
 
       if (upsertError) throw upsertError;
 
-      showToast("Data berhasil disimpan!", "success");
+      showToast(`Data ${getProgramLabel(selectedProgramType)} berhasil disimpan!`, "success");
       setIsEditMode(true);
     } catch (err) {
       console.error("Save error:", err);
@@ -411,16 +398,25 @@ export default function InputDataPage() {
     );
   }
 
-  // Prepare section data
+  // Get program-specific indicators dynamically
+  const programIndicators = selectedProgramType 
+    ? getIndicatorsForProgram(selectedProgramType) 
+    : { sectionA: [], sectionBBarang: [], sectionBSDM: [] };
+
+  // Prepare section data - DINAMIS BERDASARKAN PROGRAM
   const sectionAData = indicators.filter((ind) =>
-    SECTION_A_INDICATORS.includes(ind.indicator_name),
+    programIndicators.sectionA.includes(ind.indicator_name),
   );
   const sectionBBarangData = indicators.filter((ind) =>
-    SECTION_B_BARANG_JASA.includes(ind.indicator_name),
+    programIndicators.sectionBBarang.includes(ind.indicator_name),
   );
   const sectionBSdmData = indicators.filter((ind) =>
-    SECTION_B_SDM.includes(ind.indicator_name),
+    programIndicators.sectionBSDM.includes(ind.indicator_name),
   );
+
+  // Get program theme if selected
+  const programTheme = selectedProgramType ? getProgram(selectedProgramType).theme : null;
+  const programConfig = selectedProgramType ? getProgram(selectedProgramType) : null;
 
   return (
     <DashboardLayout>
@@ -517,6 +513,35 @@ export default function InputDataPage() {
 
             {/* Filters */}
             <div className="flex flex-wrap items-end gap-3">
+              {/* WAJIB: Program Type Selector - Paling Atas */}
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">
+                  Jenis Layanan <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={selectedProgramType}
+                  onChange={(e) => {
+                    setSelectedProgramType(e.target.value);
+                    setProgramTypeError(false);
+                  }}
+                  className={`px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[200px] ${
+                    programTypeError 
+                      ? "border-red-500 bg-red-50" 
+                      : "border-slate-300"
+                  }`}
+                >
+                  <option value="">-- Pilih Jenis Layanan --</option>
+                  {PROGRAM_TYPES_LIST.map((program) => (
+                    <option key={program.value} value={program.value}>
+                      {program.label}
+                    </option>
+                  ))}
+                </select>
+                {programTypeError && (
+                  <p className="text-xs text-red-500 mt-1">Wajib dipilih!</p>
+                )}
+              </div>
+
               {/* Puskesmas Selector - Only for Admin */}
               {isAdmin ? (
                 <div>
@@ -564,6 +589,33 @@ export default function InputDataPage() {
               </div>
             </div>
           </div>
+
+          {/* Program Type Warning Banner */}
+          {!selectedProgramType && (
+            <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 flex items-center gap-3">
+              <svg
+                className="w-6 h-6 text-amber-600 flex-shrink-0"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                />
+              </svg>
+              <div>
+                <p className="font-semibold text-amber-800">
+                  Pilih Jenis Layanan Terlebih Dahulu
+                </p>
+                <p className="text-sm text-amber-700">
+                  Anda harus memilih jenis layanan (Hipertensi / Diabetes / ODGJ) sebelum dapat menginput data.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Error Message */}
@@ -620,7 +672,7 @@ export default function InputDataPage() {
         )}
 
         {/* No Puskesmas Selected (Admin) */}
-        {isAdmin && !selectedPuskesmas && (
+        {isAdmin && !selectedPuskesmas && selectedProgramType && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center">
             <svg
               className="w-12 h-12 text-amber-500 mx-auto mb-3"
@@ -645,9 +697,38 @@ export default function InputDataPage() {
           </div>
         )}
 
-        {/* Form Sections - Only show when Puskesmas selected */}
-        {selectedPuskesmas && indicators.length > 0 && !loadingData && (
+        {/* Form Sections - Only show when ProgramType AND Puskesmas selected */}
+        {selectedProgramType && selectedPuskesmas && indicators.length > 0 && !loadingData && (
           <>
+            {/* Current Selection Badge */}
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                  <svg
+                    className="w-5 h-5 text-white"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                    />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm text-blue-600">Sedang Menginput Data:</p>
+                  <p className="font-bold text-blue-900">{getProgramLabel(selectedProgramType)}</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-slate-500">Periode</p>
+                <p className="font-semibold text-slate-700">{formatPeriodLabel(selectedPeriod)}</p>
+              </div>
+            </div>
+
             {/* SECTION A: PENERIMAAN LAYANAN DASAR */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
               <div className="px-6 py-4 bg-blue-100 border-b border-blue-200">
@@ -805,7 +886,7 @@ export default function InputDataPage() {
             <div className="flex justify-end">
               <button
                 onClick={handleSave}
-                disabled={saving || loadingData || !selectedPuskesmas}
+                disabled={saving || loadingData || !selectedPuskesmas || !selectedProgramType}
                 className="px-8 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold rounded-xl transition-colors flex items-center gap-2 text-lg shadow-lg"
               >
                 {saving ? (
@@ -857,6 +938,9 @@ export default function InputDataPage() {
             📝 Petunjuk Penggunaan:
           </h3>
           <ul className="text-sm text-blue-700 space-y-1">
+            <li>
+              • <strong className="text-red-600">WAJIB:</strong> Pilih <strong>Jenis Layanan</strong> terlebih dahulu (Hipertensi / Diabetes / ODGJ)
+            </li>
             {isAdmin && (
               <li>
                 • <strong>Admin:</strong> Pilih Puskesmas yang akan diinput/edit
