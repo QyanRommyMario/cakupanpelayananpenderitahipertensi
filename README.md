@@ -1,13 +1,26 @@
-# 📊 Dashboard SPM Kesehatan
+# 📊 SMART PTM - Sistem Monitoring Aktual dan Real Time Penyakit Tidak Menular
 
-Dashboard monitoring **Standar Pelayanan Minimal (SPM)** untuk Cakupan Pelayanan Penderita Hipertensi.
+Dashboard monitoring **Standar Pelayanan Minimal (SPM)** untuk Dinas Kesehatan Daerah Kabupaten Morowali Utara.
+
+## 🏥 4 Program SPM yang Dimonitor
+
+1. **Pelayanan Kesehatan Pada Usia Produktif** 👤
+2. **Pelayanan Kesehatan Penderita Hipertensi** ❤️
+3. **Pelayanan Kesehatan Penderita Diabetes Melitus** 🩸
+4. **Pelayanan Kesehatan ODGJ Berat** 🧠
+
+## 📊 Standar SPM
+
+- **Target Aman**: ≥ 80%
+- **Target Ideal**: 100%
+- **Rumus**: `(Realisasi / Sasaran) × 100%`
 
 ## 🚀 Tech Stack
 
 - **Frontend**: Next.js 14 (App Router) + Tailwind CSS
 - **Backend**: Supabase (PostgreSQL + Auth)
 - **Charts**: Recharts
-- **ETL**: Google Apps Script
+- **Export**: xlsx (Excel), jsPDF (PDF)
 
 ---
 

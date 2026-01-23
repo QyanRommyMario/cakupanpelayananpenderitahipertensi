@@ -25,11 +25,11 @@ import {
 import { PROGRAMS } from "@/utils/constants";
 
 /**
- * COMMAND CENTER - Overview Dashboard
+ * SMART PTM - Dashboard Utama
  * Menampilkan SELURUH data Puskesmas secara transparan
  * "Siapa yang kerja bagus, siapa yang nol besar"
  */
-export default function CommandCenterPage() {
+export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [loadingData, setLoadingData] = useState(false);
   const [globalData, setGlobalData] = useState(null);
@@ -128,6 +128,7 @@ export default function CommandCenterPage() {
       .map((p) => ({
         name: p.name,
         code: p.code,
+        "Usia Produktif": p.usiaProduktif,
         Hipertensi: p.hipertensi,
         Diabetes: p.diabetes,
         ODGJ: p.odgj,
@@ -145,38 +146,6 @@ export default function CommandCenterPage() {
         {sortConfig.direction === "asc" ? "↑" : "↓"}
       </span>
     );
-  };
-
-  // Custom tooltip for bar chart
-  const CustomBarTooltip = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <div className="bg-white p-4 rounded-xl shadow-xl border border-gray-200">
-          <p className="font-bold text-gray-800 mb-2">{label}</p>
-          <div className="space-y-1 text-sm">
-            <p className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded bg-rose-500"></span>
-              Hipertensi: <span className="font-semibold">{data.Hipertensi}%</span>
-            </p>
-            <p className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded bg-emerald-500"></span>
-              Diabetes: <span className="font-semibold">{data.Diabetes}%</span>
-            </p>
-            <p className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded bg-violet-500"></span>
-              ODGJ: <span className="font-semibold">{data.ODGJ}%</span>
-            </p>
-            <div className="pt-2 border-t mt-2">
-              <p className="font-bold text-blue-600">
-                Rata-rata: {data["Rata-rata"]}%
-              </p>
-            </div>
-          </div>
-        </div>
-      );
-    }
-    return null;
   };
 
   // Period label
@@ -201,11 +170,11 @@ export default function CommandCenterPage() {
           {/* ============================================ */}
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-3">
-                🏥 Command Center SPM Kesehatan
+              <h1 className="text-3xl font-bold text-gray-800">
+                SMART PTM
               </h1>
               <p className="text-gray-500 mt-1">
-                Rapor Kinerja Seluruh Puskesmas • Periode:{" "}
+                Sistem Monitoring Aktual dan Real Time Penyakit Tidak Menular • Periode:{" "}
                 <span className="font-semibold text-blue-600">{periodLabel}</span>
               </p>
             </div>
@@ -230,9 +199,30 @@ export default function CommandCenterPage() {
           </div>
 
           {/* ============================================ */}
-          {/* KPI CARDS - 3 Program Summary */}
+          {/* KPI CARDS - 4 Program Summary */}
           {/* ============================================ */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Usia Produktif */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-500 uppercase tracking-wide flex items-center gap-2">
+                    <span className="text-xl">👤</span> Usia Produktif
+                  </p>
+                  <p className="text-3xl font-bold text-sky-600 mt-2">
+                    {globalData?.programTotals?.usiaProduktif?.percentage || 0}%
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {(globalData?.programTotals?.usiaProduktif?.realization || 0).toLocaleString("id-ID")} /{" "}
+                    {(globalData?.programTotals?.usiaProduktif?.target || 0).toLocaleString("id-ID")} sasaran
+                  </p>
+                </div>
+                <div className={`w-14 h-14 rounded-xl flex items-center justify-center ${PROGRAMS.USIA_PRODUKTIF.theme.bgLight}`}>
+                  <span className="text-2xl">👤</span>
+                </div>
+              </div>
+            </div>
+
             {/* Hipertensi */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between">
@@ -297,61 +287,143 @@ export default function CommandCenterPage() {
             </div>
           </div>
 
-          {/* Grand Total Banner */}
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-xl p-6 text-white">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-bold">📊 Total Capaian Kabupaten</h2>
-                <p className="text-blue-100 text-sm mt-1">
-                  Agregat dari seluruh program SPM
-                </p>
+          {/* ============================================ */}
+          {/* 4 VERTICAL BAR CHARTS - TERPISAH PER PROGRAM */}
+          {/* ============================================ */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Chart 1: Usia Produktif */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-6 py-4 bg-sky-50 border-b border-sky-200">
+                <h2 className="text-lg font-bold text-sky-800 flex items-center gap-2">
+                  👤 Capaian Usia Produktif
+                </h2>
+                <p className="text-sm text-sky-600 mt-1">Perbandingan antar Puskesmas</p>
               </div>
-              <div className="text-right">
-                <p className="text-5xl font-bold">{globalData?.grandTotal?.percentage || 0}%</p>
-                <p className="text-blue-200 text-sm mt-1">
-                  {(globalData?.grandTotal?.realization || 0).toLocaleString("id-ID")} dari{" "}
-                  {(globalData?.grandTotal?.target || 0).toLocaleString("id-ID")} total sasaran
-                </p>
+              <div className="p-4">
+                <div style={{ height: 300 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={barChartData} margin={{ top: 10, right: 10, left: -10, bottom: 60 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                      <XAxis 
+                        dataKey="name" 
+                        tick={{ fontSize: 9, fill: "#374151" }} 
+                        angle={-45} 
+                        textAnchor="end" 
+                        height={60}
+                        interval={0}
+                      />
+                      <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: "#6b7280" }} tickFormatter={(v) => `${v}%`} />
+                      <Tooltip formatter={(value) => [`${value}%`, 'Capaian']} />
+                      <Bar dataKey="Usia Produktif" fill="#0284c7" radius={[4, 4, 0, 0]} maxBarSize={40}>
+                        {barChartData.map((entry, index) => (
+                          <Cell key={`cell-up-${index}`} fill={entry["Usia Produktif"] >= 80 ? "#0284c7" : entry["Usia Produktif"] >= 50 ? "#f59e0b" : "#ef4444"} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* ============================================ */}
-          {/* BAR CHART - ALL PUSKESMAS (Scrollable) */}
-          {/* ============================================ */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
-              <h2 className="text-lg font-bold text-gray-800">
-                📊 Grafik Capaian Seluruh Puskesmas
-              </h2>
-              <p className="text-sm text-gray-500 mt-1">
-                Perbandingan capaian 3 program SPM per Puskesmas (scroll untuk melihat semua)
-              </p>
+            {/* Chart 2: Hipertensi */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-6 py-4 bg-rose-50 border-b border-rose-200">
+                <h2 className="text-lg font-bold text-rose-800 flex items-center gap-2">
+                  ❤️ Capaian Hipertensi
+                </h2>
+                <p className="text-sm text-rose-600 mt-1">Perbandingan antar Puskesmas</p>
+              </div>
+              <div className="p-4">
+                <div style={{ height: 300 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={barChartData} margin={{ top: 10, right: 10, left: -10, bottom: 60 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                      <XAxis 
+                        dataKey="name" 
+                        tick={{ fontSize: 9, fill: "#374151" }} 
+                        angle={-45} 
+                        textAnchor="end" 
+                        height={60}
+                        interval={0}
+                      />
+                      <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: "#6b7280" }} tickFormatter={(v) => `${v}%`} />
+                      <Tooltip formatter={(value) => [`${value}%`, 'Capaian']} />
+                      <Bar dataKey="Hipertensi" fill="#e11d48" radius={[4, 4, 0, 0]} maxBarSize={40}>
+                        {barChartData.map((entry, index) => (
+                          <Cell key={`cell-ht-${index}`} fill={entry.Hipertensi >= 80 ? "#e11d48" : entry.Hipertensi >= 50 ? "#f59e0b" : "#ef4444"} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
             </div>
-            <div className="p-4 overflow-x-auto">
-              {/* Dynamic height based on data count */}
-              <div style={{ height: Math.max(400, barChartData.length * 50), minWidth: 600 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={barChartData}
-                    layout="vertical"
-                    margin={{ top: 10, right: 30, left: 120, bottom: 10 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e5e7eb" />
-                    <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: "#6b7280" }} tickFormatter={(v) => `${v}%`} />
-                    <YAxis 
-                      type="category" 
-                      dataKey="name" 
-                      tick={{ fontSize: 11, fill: "#374151" }} 
-                      width={110}
-                    />
-                    <Tooltip content={<CustomBarTooltip />} />
-                    <Legend />
-                    <Bar dataKey="Hipertensi" fill="#e11d48" radius={[0, 2, 2, 0]} maxBarSize={15} />
-                    <Bar dataKey="Diabetes" fill="#059669" radius={[0, 2, 2, 0]} maxBarSize={15} />
-                    <Bar dataKey="ODGJ" fill="#7c3aed" radius={[0, 2, 2, 0]} maxBarSize={15} />
-                  </BarChart>
-                </ResponsiveContainer>
+
+            {/* Chart 3: Diabetes */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-6 py-4 bg-emerald-50 border-b border-emerald-200">
+                <h2 className="text-lg font-bold text-emerald-800 flex items-center gap-2">
+                  🩸 Capaian Diabetes Melitus
+                </h2>
+                <p className="text-sm text-emerald-600 mt-1">Perbandingan antar Puskesmas</p>
+              </div>
+              <div className="p-4">
+                <div style={{ height: 300 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={barChartData} margin={{ top: 10, right: 10, left: -10, bottom: 60 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                      <XAxis 
+                        dataKey="name" 
+                        tick={{ fontSize: 9, fill: "#374151" }} 
+                        angle={-45} 
+                        textAnchor="end" 
+                        height={60}
+                        interval={0}
+                      />
+                      <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: "#6b7280" }} tickFormatter={(v) => `${v}%`} />
+                      <Tooltip formatter={(value) => [`${value}%`, 'Capaian']} />
+                      <Bar dataKey="Diabetes" fill="#059669" radius={[4, 4, 0, 0]} maxBarSize={40}>
+                        {barChartData.map((entry, index) => (
+                          <Cell key={`cell-dm-${index}`} fill={entry.Diabetes >= 80 ? "#059669" : entry.Diabetes >= 50 ? "#f59e0b" : "#ef4444"} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            {/* Chart 4: ODGJ */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-6 py-4 bg-violet-50 border-b border-violet-200">
+                <h2 className="text-lg font-bold text-violet-800 flex items-center gap-2">
+                  🧠 Capaian ODGJ Berat
+                </h2>
+                <p className="text-sm text-violet-600 mt-1">Perbandingan antar Puskesmas</p>
+              </div>
+              <div className="p-4">
+                <div style={{ height: 300 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={barChartData} margin={{ top: 10, right: 10, left: -10, bottom: 60 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                      <XAxis 
+                        dataKey="name" 
+                        tick={{ fontSize: 9, fill: "#374151" }} 
+                        angle={-45} 
+                        textAnchor="end" 
+                        height={60}
+                        interval={0}
+                      />
+                      <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: "#6b7280" }} tickFormatter={(v) => `${v}%`} />
+                      <Tooltip formatter={(value) => [`${value}%`, 'Capaian']} />
+                      <Bar dataKey="ODGJ" fill="#7c3aed" radius={[4, 4, 0, 0]} maxBarSize={40}>
+                        {barChartData.map((entry, index) => (
+                          <Cell key={`cell-odgj-${index}`} fill={entry.ODGJ >= 80 ? "#7c3aed" : entry.ODGJ >= 50 ? "#f59e0b" : "#ef4444"} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             </div>
           </div>
@@ -430,25 +502,31 @@ export default function CommandCenterPage() {
                       Nama Puskesmas <SortIcon columnKey="name" />
                     </th>
                     <th 
-                      className="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-slate-600 transition-colors min-w-[120px]"
+                      className="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-slate-600 transition-colors min-w-[100px]"
+                      onClick={() => handleSort("usiaProduktif")}
+                    >
+                      👤 Usia Produktif <SortIcon columnKey="usiaProduktif" />
+                    </th>
+                    <th 
+                      className="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-slate-600 transition-colors min-w-[100px]"
                       onClick={() => handleSort("hipertensi")}
                     >
                       ❤️ Hipertensi <SortIcon columnKey="hipertensi" />
                     </th>
                     <th 
-                      className="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-slate-600 transition-colors min-w-[120px]"
+                      className="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-slate-600 transition-colors min-w-[100px]"
                       onClick={() => handleSort("diabetes")}
                     >
                       🩸 Diabetes <SortIcon columnKey="diabetes" />
                     </th>
                     <th 
-                      className="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-slate-600 transition-colors min-w-[120px]"
+                      className="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-slate-600 transition-colors min-w-[100px]"
                       onClick={() => handleSort("odgj")}
                     >
                       🧠 ODGJ <SortIcon columnKey="odgj" />
                     </th>
                     <th 
-                      className="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-slate-600 transition-colors min-w-[130px]"
+                      className="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-slate-600 transition-colors min-w-[110px]"
                       onClick={() => handleSort("avg")}
                     >
                       📊 Rata-rata <SortIcon columnKey="avg" />
@@ -461,7 +539,7 @@ export default function CommandCenterPage() {
                 <tbody>
                   {filteredAndSortedData.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                      <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
                         {searchQuery ? (
                           <>
                             <svg className="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -481,6 +559,7 @@ export default function CommandCenterPage() {
                     </tr>
                   ) : (
                     filteredAndSortedData.map((pkm, idx) => {
+                      const upColor = getScoreColor(pkm.usiaProduktif);
                       const hColor = getScoreColor(pkm.hipertensi);
                       const dColor = getScoreColor(pkm.diabetes);
                       const oColor = getScoreColor(pkm.odgj);
@@ -503,6 +582,11 @@ export default function CommandCenterPage() {
                           <td className="px-4 py-3">
                             <p className="font-semibold text-gray-800">{pkm.name}</p>
                             <p className="text-xs text-gray-500">{pkm.code}</p>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={`inline-block px-3 py-1 rounded-lg font-bold text-sm ${upColor.bg} ${upColor.text}`}>
+                              {pkm.usiaProduktif}%
+                            </span>
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span className={`inline-block px-3 py-1 rounded-lg font-bold text-sm ${hColor.bg} ${hColor.text}`}>
@@ -590,7 +674,19 @@ export default function CommandCenterPage() {
           </div>
 
           {/* Quick Actions - Link to Detail Pages */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <a
+              href="/usia-produktif"
+              className="flex items-center gap-4 p-4 bg-sky-50 border border-sky-200 rounded-xl hover:bg-sky-100 transition-colors"
+            >
+              <div className="w-12 h-12 bg-sky-600 rounded-xl flex items-center justify-center">
+                <span className="text-2xl">👤</span>
+              </div>
+              <div>
+                <p className="font-semibold text-sky-800">Detail Usia Produktif</p>
+                <p className="text-sm text-sky-600">Lihat rincian per indikator</p>
+              </div>
+            </a>
             <a
               href="/hipertensi"
               className="flex items-center gap-4 p-4 bg-rose-50 border border-rose-200 rounded-xl hover:bg-rose-100 transition-colors"
@@ -631,7 +727,7 @@ export default function CommandCenterPage() {
 
           {/* Footer */}
           <div className="text-center text-xs text-gray-400 py-4">
-            Data diperbarui secara realtime dari Supabase • Dinas Kesehatan Kab. Morowali Utara
+            SMART PTM - Sistem Monitoring Aktual dan Real Time Penyakit Tidak Menular • Dinas Kesehatan Daerah Kab. Morowali Utara
           </div>
         </div>
       </div>

@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { PROGRAMS, PROGRAM_TYPES_LIST } from "@/utils/constants";
@@ -45,19 +46,32 @@ export default function Navbar() {
   return (
     <nav className="sticky top-0 z-50 bg-slate-900 shadow-md">
       <div className="max-w-full mx-auto px-6">
-        <div className="flex items-center justify-between h-14">
-          {/* Logo / Brand */}
-          <div className="flex items-center">
-            <span className="text-white font-semibold text-lg tracking-tight">
-              🏥 SPM Kesehatan
-            </span>
-            <span className="hidden sm:inline-block ml-3 text-slate-400 text-sm border-l border-slate-700 pl-3">
-              Dinas Kesehatan Kabupaten
-            </span>
+        <div className="flex items-center justify-between h-16">
+          {/* Logo / Brand with Official Logo */}
+          <div className="flex items-center gap-3">
+            {/* Logo Kabupaten Morowali Utara */}
+            <div className="flex-shrink-0">
+              <Image
+                src="/logo-morowali-utara.svg"
+                alt="Logo Kabupaten Morowali Utara"
+                width={40}
+                height={40}
+                className="h-10 w-auto"
+                priority
+              />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-white font-bold text-base tracking-tight leading-tight">
+                SMART PTM
+              </span>
+              <span className="hidden sm:block text-slate-400 text-xs leading-tight">
+                Dinas Kesehatan Daerah Kab. Morowali Utara
+              </span>
+            </div>
           </div>
 
           {/* Desktop Navigation Links */}
-          <div className="hidden md:flex items-center space-x-1">
+          <div className="hidden lg:flex items-center space-x-1">
             {/* Command Center Link */}
             <Link
               href={commandCenterItem.href}
@@ -153,7 +167,7 @@ export default function Navbar() {
           </div>
 
           {/* Mobile Menu Button */}
-          <div className="md:hidden">
+          <div className="lg:hidden">
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="text-slate-400 hover:text-white p-2"
@@ -186,7 +200,7 @@ export default function Navbar() {
 
         {/* Mobile Menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden pb-4 border-t border-slate-700 mt-2 pt-4">
+          <div className="lg:hidden pb-4 border-t border-slate-700 mt-2 pt-4">
             <div className="space-y-1">
               {/* Command Center */}
               <Link

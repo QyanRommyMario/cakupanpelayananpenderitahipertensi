@@ -115,7 +115,7 @@ export default function DashboardLayout({ children }) {
           </div>
           {!sidebarCollapsed && (
             <div className="flex flex-col">
-              <span className="font-bold text-sm">SPM Kesehatan</span>
+              <span className="font-bold text-sm">SMART PTM</span>
               <span className="text-xs text-slate-400">Morowali Utara</span>
             </div>
           )}

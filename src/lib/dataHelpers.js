@@ -313,6 +313,7 @@ export async function getGlobalSummary(period = null, periods = null) {
       puskesmasMap[pkm.code] = {
         code: pkm.code,
         name: pkm.name,
+        usiaProduktif: { target: 0, realization: 0 },
         hipertensi: { target: 0, realization: 0 },
         diabetes: { target: 0, realization: 0 },
         odgj: { target: 0, realization: 0 },
@@ -321,6 +322,7 @@ export async function getGlobalSummary(period = null, periods = null) {
 
     // Program totals
     const programTotals = {
+      USIA_PRODUKTIF: { target: 0, realization: 0 },
       HIPERTENSI: { target: 0, realization: 0 },
       DIABETES: { target: 0, realization: 0 },
       ODGJ: { target: 0, realization: 0 },
@@ -336,8 +338,15 @@ export async function getGlobalSummary(period = null, periods = null) {
       const realization = parseFloat(row.realization_qty) || 0;
 
       if (puskesmasMap[code] && program) {
-        const programKey = program.toLowerCase();
-        if (puskesmasMap[code][programKey]) {
+        // Map program type to object key
+        const programKeyMap = {
+          'USIA_PRODUKTIF': 'usiaProduktif',
+          'HIPERTENSI': 'hipertensi',
+          'DIABETES': 'diabetes',
+          'ODGJ': 'odgj'
+        };
+        const programKey = programKeyMap[program];
+        if (programKey && puskesmasMap[code][programKey]) {
           puskesmasMap[code][programKey].target += target;
           puskesmasMap[code][programKey].realization += realization;
         }
@@ -357,6 +366,7 @@ export async function getGlobalSummary(period = null, periods = null) {
         return Math.round((data.realization / data.target) * 100 * 10) / 10;
       };
 
+      const usiaProduktifPct = calcPct(pkm.usiaProduktif);
       const hipertensiPct = calcPct(pkm.hipertensi);
       const diabetesPct = calcPct(pkm.diabetes);
       const odgjPct = calcPct(pkm.odgj);
@@ -364,6 +374,7 @@ export async function getGlobalSummary(period = null, periods = null) {
       // Calculate average (only count programs with data)
       let validPrograms = 0;
       let totalPct = 0;
+      if (pkm.usiaProduktif.target > 0) { validPrograms++; totalPct += usiaProduktifPct; }
       if (pkm.hipertensi.target > 0) { validPrograms++; totalPct += hipertensiPct; }
       if (pkm.diabetes.target > 0) { validPrograms++; totalPct += diabetesPct; }
       if (pkm.odgj.target > 0) { validPrograms++; totalPct += odgjPct; }
@@ -373,6 +384,8 @@ export async function getGlobalSummary(period = null, periods = null) {
       return {
         code: pkm.code,
         name: pkm.name,
+        usiaProduktif: usiaProduktifPct,
+        usiaProduktifData: pkm.usiaProduktif,
         hipertensi: hipertensiPct,
         hipertensiData: pkm.hipertensi,
         diabetes: diabetesPct,
@@ -390,7 +403,15 @@ export async function getGlobalSummary(period = null, periods = null) {
     const formattedProgramTotals = {};
     Object.keys(programTotals).forEach((program) => {
       const data = programTotals[program];
-      formattedProgramTotals[program.toLowerCase()] = {
+      // Convert USIA_PRODUKTIF to usiaProduktif for consistency
+      const keyMap = {
+        'USIA_PRODUKTIF': 'usiaProduktif',
+        'HIPERTENSI': 'hipertensi',
+        'DIABETES': 'diabetes',
+        'ODGJ': 'odgj'
+      };
+      const key = keyMap[program] || program.toLowerCase();
+      formattedProgramTotals[key] = {
         target: data.target,
         realization: data.realization,
         percentage: data.target > 0 

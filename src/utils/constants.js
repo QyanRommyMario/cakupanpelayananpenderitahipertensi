@@ -7,6 +7,8 @@
 // PROGRAM TYPES - Nilai untuk database
 // ============================================
 export const PROGRAM_TYPES = {
+  SEMUA_PROGRAM: 'SEMUA_PROGRAM',
+  USIA_PRODUKTIF: 'USIA_PRODUKTIF',
   HIPERTENSI: 'HIPERTENSI',
   DIABETES: 'DIABETES',
   ODGJ: 'ODGJ'
@@ -16,6 +18,106 @@ export const PROGRAM_TYPES = {
 // PROGRAMS CONFIG - Konfigurasi lengkap per program
 // ============================================
 export const PROGRAMS = {
+  SEMUA_PROGRAM: {
+    id: 'SEMUA_PROGRAM',
+    label: 'Semua Jenis SPM',
+    shortLabel: 'Semua SPM',
+    description: 'Rekapitulasi Seluruh Jenis Pelayanan SPM',
+    path: null,
+    indicators: null, // Tidak ada indikator spesifik
+    theme: {
+      name: 'slate',
+      primary: '#475569',
+      primaryLight: '#f1f5f9',
+      primaryDark: '#334155',
+      bg: 'bg-slate-600',
+      bgLight: 'bg-slate-100',
+      bgLighter: 'bg-slate-50',
+      text: 'text-slate-600',
+      textDark: 'text-slate-700',
+      textLight: 'text-slate-100',
+      border: 'border-slate-200',
+      borderDark: 'border-slate-600',
+      ring: 'ring-slate-500',
+      hover: 'hover:bg-slate-700',
+      chartPrimary: '#475569',
+      chartSecondary: '#94a3b8',
+      chartAccent: '#cbd5e1',
+    },
+    icon: '📊',
+  },
+  USIA_PRODUKTIF: {
+    id: 'USIA_PRODUKTIF',
+    label: 'SPM Usia Produktif',
+    shortLabel: 'Usia Produktif',
+    description: 'Pelayanan Kesehatan Pada Usia Produktif',
+    path: '/usia-produktif',
+    // DEFINISI KATEGORI INDIKATOR
+    indicators: {
+      // Bagian A: Sasaran Manusia (Pelayanan Dasar)
+      partA: ['JUMLAH YANG HARUS DILAYANI'],
+      // Bagian B: Sasaran Barang/Jasa (Mutu Layanan)
+      partB: [
+        'Kit Pemeriksaan IVA',
+        'Alat Pemeriksaan Tekanan Darah',
+        'Alat Pemeriksaan Gula Darah',
+        'Strip Gula Darah',
+        'Alat Pemeriksaan Kolesterol',
+        'Strip Kolesterol',
+        'Pedoman Pelayanan Usia Produktif',
+        'Media KIE Usia Produktif',
+        'Formulir Pencatatan dan Pelaporan',
+        'Tenaga Medis : Dokter',
+        'Tenaga Kesehatan : Bidan',
+        'Tenaga Kesehatan : Perawat',
+        'Tenaga Kesehatan : Tenaga Gizi',
+        'Tenaga Kesehatan : Tenaga Promosi Kesehatan',
+        'Tenaga Kesehatan : Tenaga Laboratorium',
+      ],
+      partBBarang: [
+        'Kit Pemeriksaan IVA',
+        'Alat Pemeriksaan Tekanan Darah',
+        'Alat Pemeriksaan Gula Darah',
+        'Strip Gula Darah',
+        'Alat Pemeriksaan Kolesterol',
+        'Strip Kolesterol',
+        'Pedoman Pelayanan Usia Produktif',
+        'Media KIE Usia Produktif',
+        'Formulir Pencatatan dan Pelaporan',
+      ],
+      partBSDM: [
+        'Tenaga Medis : Dokter',
+        'Tenaga Kesehatan : Bidan',
+        'Tenaga Kesehatan : Perawat',
+        'Tenaga Kesehatan : Tenaga Gizi',
+        'Tenaga Kesehatan : Tenaga Promosi Kesehatan',
+        'Tenaga Kesehatan : Tenaga Laboratorium',
+      ],
+    },
+    theme: {
+      name: 'sky',
+      // Warna Primary
+      primary: '#0284c7',        // sky-600
+      primaryLight: '#e0f2fe',   // sky-100
+      primaryDark: '#0369a1',    // sky-700
+      // Tailwind Classes
+      bg: 'bg-sky-600',
+      bgLight: 'bg-sky-100',
+      bgLighter: 'bg-sky-50',
+      text: 'text-sky-600',
+      textDark: 'text-sky-700',
+      textLight: 'text-sky-100',
+      border: 'border-sky-200',
+      borderDark: 'border-sky-600',
+      ring: 'ring-sky-500',
+      hover: 'hover:bg-sky-700',
+      // Chart Colors
+      chartPrimary: '#0284c7',
+      chartSecondary: '#38bdf8',
+      chartAccent: '#7dd3fc',
+    },
+    icon: '👤',
+  },
   HIPERTENSI: {
     id: 'HIPERTENSI',
     label: 'SPM Hipertensi',
@@ -323,6 +425,46 @@ export const isPartBIndicator = (programId, indicatorName) => {
 // INDICATOR CONFIG PER PROGRAM (Legacy Support)
 // ============================================
 export const INDICATORS_BY_PROGRAM = {
+  USIA_PRODUKTIF: {
+    order: [
+      "JUMLAH YANG HARUS DILAYANI",
+      "Kit Pemeriksaan IVA",
+      "Alat Pemeriksaan Tekanan Darah",
+      "Alat Pemeriksaan Gula Darah",
+      "Strip Gula Darah",
+      "Alat Pemeriksaan Kolesterol",
+      "Strip Kolesterol",
+      "Pedoman Pelayanan Usia Produktif",
+      "Media KIE Usia Produktif",
+      "Formulir Pencatatan dan Pelaporan",
+      "Tenaga Medis : Dokter",
+      "Tenaga Kesehatan : Bidan",
+      "Tenaga Kesehatan : Perawat",
+      "Tenaga Kesehatan : Tenaga Gizi",
+      "Tenaga Kesehatan : Tenaga Promosi Kesehatan",
+      "Tenaga Kesehatan : Tenaga Laboratorium",
+    ],
+    sectionA: ["JUMLAH YANG HARUS DILAYANI"],
+    sectionBBarang: [
+      "Kit Pemeriksaan IVA",
+      "Alat Pemeriksaan Tekanan Darah",
+      "Alat Pemeriksaan Gula Darah",
+      "Strip Gula Darah",
+      "Alat Pemeriksaan Kolesterol",
+      "Strip Kolesterol",
+      "Pedoman Pelayanan Usia Produktif",
+      "Media KIE Usia Produktif",
+      "Formulir Pencatatan dan Pelaporan",
+    ],
+    sectionBSDM: [
+      "Tenaga Medis : Dokter",
+      "Tenaga Kesehatan : Bidan",
+      "Tenaga Kesehatan : Perawat",
+      "Tenaga Kesehatan : Tenaga Gizi",
+      "Tenaga Kesehatan : Tenaga Promosi Kesehatan",
+      "Tenaga Kesehatan : Tenaga Laboratorium",
+    ],
+  },
   HIPERTENSI: {
     order: [
       "JUMLAH YANG HARUS DILAYANI",
