@@ -36,33 +36,20 @@ export default function LoginPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-600/30">
-            <svg
-              className="w-8 h-8 text-white"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-              />
-            </svg>
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            Dashboard SPM Kesehatan
+          <img 
+            src="/logo-morowali-utara.svg" 
+            alt="Logo Kabupaten Morowali Utara" 
+            className="w-20 h-20 mx-auto mb-4"
+          />
+          <h1 className="text-xl font-bold text-gray-900">
+            Sistem Monitoring Aktual dan Real Time Penyakit Tidak Menular (SMART-PTM)
           </h1>
           <p className="text-gray-600 mt-1">
-            Dinas Kesehatan Kabupaten Morowali Utara
+            Dinas Kesehatan Daerah Kabupaten Morowali Utara
           </p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl shadow-gray-200/50 p-8 border border-gray-100">
-          <h2 className="text-xl font-semibold text-gray-800 mb-6">
-            Masuk ke Sistem
-          </h2>
 
           {error && (
             <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-lg text-sm text-rose-600 flex items-center gap-2">
@@ -94,18 +81,8 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                placeholder="[kode]@dinkes.go.id"
+                placeholder="Masukkan email"
               />
-              <p className="text-xs text-gray-500 mt-1">
-                Contoh:{" "}
-                <code className="bg-gray-100 px-1 rounded">
-                  pmr@dinkes.go.id
-                </code>
-                ,{" "}
-                <code className="bg-gray-100 px-1 rounded">
-                  ant@dinkes.go.id
-                </code>
-              </p>
             </div>
 
             <div>
@@ -118,7 +95,7 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                placeholder="••••••••"
+                placeholder="Masukkan password"
               />
             </div>
 

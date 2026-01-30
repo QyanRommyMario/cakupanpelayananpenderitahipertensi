@@ -10,6 +10,7 @@ export default function DashboardLayout({ children }) {
   const pathname = usePathname();
   const [user, setUser] = useState(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -24,6 +25,11 @@ export default function DashboardLayout({ children }) {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -92,27 +98,57 @@ export default function DashboardLayout({ children }) {
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar */}
+      {/* Mobile Header */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-slate-800 z-30 flex items-center justify-between px-4">
+        <div className="flex items-center">
+          <img 
+            src="/logo-morowali-utara.svg" 
+            alt="Logo" 
+            className="w-8 h-8 mr-3"
+          />
+          <div className="flex flex-col">
+            <span className="font-bold text-sm text-white">SMART PTM</span>
+            <span className="text-xs text-slate-400">Morowali Utara</span>
+          </div>
+        </div>
+        <button
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          className="p-2 rounded-lg text-white hover:bg-slate-700"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {mobileMenuOpen ? (
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            ) : (
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            )}
+          </svg>
+        </button>
+      </div>
+
+      {/* Mobile Overlay */}
+      {mobileMenuOpen && (
+        <div 
+          className="lg:hidden fixed inset-0 bg-black/50 z-30"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Sidebar - Desktop & Mobile */}
       <aside
-        className={`${sidebarCollapsed ? "w-16" : "w-64"} bg-slate-800 text-white flex flex-col fixed h-full transition-all duration-300 z-20`}
+        className={`
+          fixed h-full bg-slate-800 text-white flex flex-col transition-all duration-300 z-40
+          ${sidebarCollapsed ? "w-16" : "w-64"}
+          lg:translate-x-0
+          ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
+        `}
       >
         {/* Header */}
         <div className="h-16 flex items-center px-4 border-b border-slate-700">
-          <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center mr-3 flex-shrink-0">
-            <svg
-              className="w-5 h-5 text-white"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-              />
-            </svg>
-          </div>
+          <img 
+            src="/logo-morowali-utara.svg" 
+            alt="Logo" 
+            className="w-8 h-8 mr-3 flex-shrink-0"
+          />
           {!sidebarCollapsed && (
             <div className="flex flex-col">
               <span className="font-bold text-sm">SMART PTM</span>
@@ -121,10 +157,10 @@ export default function DashboardLayout({ children }) {
           )}
         </div>
 
-        {/* Toggle Button */}
+        {/* Toggle Button - Desktop Only */}
         <button
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          className="absolute -right-3 top-20 w-6 h-6 bg-slate-800 rounded-full flex items-center justify-center border border-slate-600 hover:bg-slate-700"
+          className="hidden lg:flex absolute -right-3 top-20 w-6 h-6 bg-slate-800 rounded-full items-center justify-center border border-slate-600 hover:bg-slate-700"
         >
           <svg
             className={`w-3 h-3 text-white transition-transform ${sidebarCollapsed ? "rotate-180" : ""}`}
@@ -196,7 +232,11 @@ export default function DashboardLayout({ children }) {
 
       {/* Main Content */}
       <main
-        className={`flex-1 ${sidebarCollapsed ? "ml-16" : "ml-64"} transition-all duration-300 overflow-auto`}
+        className={`
+          flex-1 transition-all duration-300 overflow-auto
+          pt-16 lg:pt-0
+          ${sidebarCollapsed ? "lg:ml-16" : "lg:ml-64"}
+        `}
       >
         {children}
       </main>

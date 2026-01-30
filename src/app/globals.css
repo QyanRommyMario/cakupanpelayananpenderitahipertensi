@@ -1,3 +1,159 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ==========================================
+   SMART PTM - Global Styles
+   Dinas Kesehatan Kabupaten Morowali Utara
+   ========================================== */
+
+@layer base {
+  /* Mencegah pull-to-refresh di mobile */
+  html {
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply text-gray-900;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Focus styles untuk aksesibilitas */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-blue-500 ring-offset-2;
+  }
+}
+
+@layer components {
+  /* Card component standar */
+  .card {
+    @apply bg-white rounded-xl shadow-sm border border-gray-100;
+  }
+
+  /* Button variants */
+  .btn-primary {
+    @apply px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors disabled:bg-blue-400 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium rounded-xl transition-colors;
+  }
+
+  .btn-danger {
+    @apply px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-medium rounded-xl transition-colors;
+  }
+
+  /* Input field standar */
+  .input-field {
+    @apply w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all;
+  }
+
+  /* Select dropdown standar */
+  .select-field {
+    @apply w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all bg-white appearance-none cursor-pointer;
+  }
+
+  /* Badge variants */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-success {
+    @apply badge bg-emerald-100 text-emerald-800;
+  }
+
+  .badge-warning {
+    @apply badge bg-amber-100 text-amber-800;
+  }
+
+  .badge-danger {
+    @apply badge bg-rose-100 text-rose-800;
+  }
+
+  .badge-info {
+    @apply badge bg-blue-100 text-blue-800;
+  }
+
+  /* Table styles */
+  .table-header {
+    @apply bg-gray-50 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider;
+  }
+
+  .table-cell {
+    @apply px-4 py-3 text-sm text-gray-700 border-b border-gray-100;
+  }
+
+  /* Progress bar */
+  .progress-bar {
+    @apply h-2 bg-gray-200 rounded-full overflow-hidden;
+  }
+
+  .progress-fill {
+    @apply h-full rounded-full transition-all duration-500;
+  }
+}
+
+@layer utilities {
+  /* Custom scrollbar untuk webkit */
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    @apply bg-gray-100 rounded;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 rounded hover:bg-gray-400;
+  }
+
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-blue-800;
+  }
+
+  /* Safe area untuk notch/dynamic island */
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    @apply bg-white;
+  }
+
+  .card {
+    @apply shadow-none border-gray-300;
+  }
+}
+
+/* PWA standalone mode styles */
+@media all and (display-mode: standalone) {
+  body {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
 import { supabase } from "@/lib/supabase";
 import { calculateMetrics } from "@/lib/dataHelpers";
+import logger from "@/lib/logger";
 import {
   generateTriwulanOptions,
   getCurrentPeriod,
@@ -1021,7 +1022,7 @@ export default function LaporanPage() {
 
       XLSX.writeFile(wb, filename);
     } catch (err) {
-      console.error("Export Excel error:", err);
+      logger.error("Export Excel error", err);
       setError("Gagal mengekspor ke Excel: " + err.message);
     } finally {
       setExporting(false);
@@ -1077,7 +1078,7 @@ export default function LaporanPage() {
           { align: "center" },
         );
         doc.text(
-          "Telp/Fax: (0465) XXXXXX | Email: dinkes@morowaliutarakab.go.id",
+          "Email: dinkes@morowaliutarakab.go.id",
           pageWidth / 2,
           33,
           { align: "center" },
@@ -1960,7 +1961,7 @@ export default function LaporanPage() {
 
       doc.save(filename);
     } catch (err) {
-      console.error("Export PDF error:", err);
+      logger.error("Export PDF error", err);
       setError("Gagal mengekspor ke PDF: " + err.message);
     } finally {
       setExporting(false);
@@ -2037,7 +2038,7 @@ export default function LaporanPage() {
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Period - Dropdown Triwulan */}
+            {/* Period - Dropdown Per Bulan */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
                 Periode <span className="text-red-500">*</span>
@@ -2117,7 +2118,7 @@ export default function LaporanPage() {
               </svg>
               <p className="text-sm text-purple-700">
                 <strong>Mode Rekap Tahunan:</strong> Data digabungkan dari
-                seluruh Triwulan dalam tahun yang dipilih
+                seluruh Bulan dalam tahun yang dipilih
               </p>
             </div>
           )}

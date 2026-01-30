@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
 import { supabase } from "@/lib/supabase";
 import { calculateMetrics } from "@/lib/dataHelpers";
+import logger from "@/lib/logger";
 import {
   generateTriwulanOptions,
   getCurrentPeriod,
@@ -43,7 +44,7 @@ export default function InputDataPage() {
   const [puskesmasList, setPuskesmasList] = useState([]);
   const [indicators, setIndicators] = useState([]);
   const periodOptions = useMemo(
-    () => generateTriwulanOptions().filter((p) => p.type === "quarter"),
+    () => generateTriwulanOptions().filter((p) => p.type === "month"),
     [],
   );
 
@@ -126,7 +127,7 @@ export default function InputDataPage() {
           }
         }
       } catch (err) {
-        console.error("Init error:", err);
+        logger.error("Init error", err);
         setError(err.message);
       } finally {
         setLoading(false);
@@ -213,7 +214,7 @@ export default function InputDataPage() {
         });
         setFormData(updatedData);
       } catch (err) {
-        console.error("Load data error:", err);
+        logger.error("Load data error", err);
         setError("Gagal memuat data: " + err.message);
       } finally {
         setLoadingData(false);
@@ -309,7 +310,7 @@ export default function InputDataPage() {
       );
       setIsEditMode(true);
     } catch (err) {
-      console.error("Save error:", err);
+      logger.error("Save error", err);
       showToast("Gagal menyimpan: " + err.message, "error");
     } finally {
       setSaving(false);
@@ -600,10 +601,10 @@ export default function InputDataPage() {
                 </div>
               )}
 
-              {/* Period Selector - Dropdown Triwulan */}
+              {/* Period Selector - Dropdown Per Bulan */}
               <div>
                 <label className="block text-xs text-slate-500 mb-1">
-                  Periode (Triwulan)
+                  Periode (Per Bulan)
                 </label>
                 <select
                   value={selectedPeriod}
@@ -995,8 +996,8 @@ export default function InputDataPage() {
               </li>
             )}
             <li>
-              • Pilih <strong>Periode Triwulan</strong> untuk input data (TW1,
-              TW2, TW3, TW4)
+              • Pilih <strong>Periode Bulan</strong> untuk input data (Januari
+              s/d Desember)
             </li>
             <li>
               • <strong>Section A:</strong> Jumlah sasaran yang harus dilayani

@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import DashboardLayout from "@/components/DashboardLayout";
 import { supabase } from "@/lib/supabase";
+import logger from "@/lib/logger";
 import {
   generateTriwulanOptions,
   getCurrentPeriod,
@@ -152,7 +153,7 @@ export default function IndikatorPage() {
         if (error) throw error;
         setRawData(data || []);
       } catch (err) {
-        console.error("Error fetching indicator data:", err);
+        logger.error("Error fetching indicator data", err, { selectedProgram, selectedIndicator });
       } finally {
         setLoadingData(false);
       }
@@ -545,10 +546,11 @@ export default function IndikatorPage() {
                 <div
                   style={{
                     height: Math.max(300, chartData.length * 40),
+                    minHeight: 280,
                     minWidth: 600,
                   }}
                 >
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minHeight={280}>
                     <BarChart
                       data={chartData}
                       layout="vertical"

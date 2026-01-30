@@ -32,16 +32,7 @@ export function generateTriwulanOptions() {
   const years = [2025, 2026];
 
   years.forEach((year) => {
-    // Add annual recap option at the beginning of each year
-    options.push({
-      value: `REKAP-${year}`,
-      label: `📊 REKAP TAHUN ${year}`,
-      type: "annual",
-      year: year,
-      month: null,
-    });
-
-    // Generate all 12 months for each year
+    // Generate all 12 months for each year FIRST
     for (let month = 1; month <= 12; month++) {
       const monthStr = month.toString().padStart(2, "0");
       options.push({
@@ -52,6 +43,15 @@ export function generateTriwulanOptions() {
         month: month,
       });
     }
+
+    // Add annual recap option at the END of each year
+    options.push({
+      value: `REKAP-${year}`,
+      label: `📊 REKAP TAHUN ${year}`,
+      type: "annual",
+      year: year,
+      month: null,
+    });
   });
 
   return options;

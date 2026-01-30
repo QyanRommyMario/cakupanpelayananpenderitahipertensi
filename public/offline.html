@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#1e40af">
+  <title>Tidak Terhubung - SMART PTM</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #f8fafc 0%, #e0e7ff 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    
+    .container {
+      background: white;
+      border-radius: 1.5rem;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.1);
+      padding: 2.5rem;
+      max-width: 28rem;
+      width: 100%;
+      text-align: center;
+    }
+    
+    .icon-wrapper {
+      width: 5rem;
+      height: 5rem;
+      background: #fef3c7;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 1.5rem;
+    }
+    
+    .icon {
+      width: 2.5rem;
+      height: 2.5rem;
+      color: #d97706;
+    }
+    
+    h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #111827;
+      margin-bottom: 0.5rem;
+    }
+    
+    p {
+      color: #6b7280;
+      margin-bottom: 1.5rem;
+      line-height: 1.6;
+    }
+    
+    .tips {
+      background: #f9fafb;
+      border-radius: 0.75rem;
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+      text-align: left;
+    }
+    
+    .tips h2 {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 0.5rem;
+    }
+    
+    .tips ul {
+      list-style: none;
+      font-size: 0.875rem;
+      color: #6b7280;
+    }
+    
+    .tips li {
+      padding: 0.25rem 0;
+      padding-left: 1.25rem;
+      position: relative;
+    }
+    
+    .tips li::before {
+      content: "•";
+      position: absolute;
+      left: 0;
+      color: #3b82f6;
+    }
+    
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      background: #1e40af;
+      color: white;
+      font-weight: 500;
+      padding: 0.75rem 1.5rem;
+      border-radius: 0.75rem;
+      border: none;
+      cursor: pointer;
+      font-size: 0.875rem;
+      transition: background-color 0.2s;
+    }
+    
+    .btn:hover {
+      background: #1e3a8a;
+    }
+    
+    .btn svg {
+      width: 1rem;
+      height: 1rem;
+    }
+    
+    .footer {
+      margin-top: 1.5rem;
+      font-size: 0.75rem;
+      color: #9ca3af;
+    }
+    
+    .brand {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+    }
+    
+    .brand-icon {
+      width: 2rem;
+      height: 2rem;
+      background: #1e40af;
+      border-radius: 0.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .brand-icon svg {
+      width: 1.25rem;
+      height: 1.25rem;
+      color: white;
+    }
+    
+    .brand-text {
+      font-weight: 700;
+      color: #1e40af;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="brand">
+      <div class="brand-icon">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+        </svg>
+      </div>
+      <span class="brand-text">SMART PTM</span>
+    </div>
+    
+    <div class="icon-wrapper">
+      <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414"/>
+      </svg>
+    </div>
+    
+    <h1>Koneksi Terputus</h1>
+    <p>
+      Perangkat Anda sedang tidak terhubung ke jaringan internet. 
+      Beberapa fitur mungkin tidak tersedia.
+    </p>
+    
+    <div class="tips">
+      <h2>Yang dapat Anda lakukan:</h2>
+      <ul>
+        <li>Periksa koneksi WiFi atau data seluler</li>
+        <li>Pastikan mode pesawat tidak aktif</li>
+        <li>Coba pindah ke lokasi dengan sinyal lebih baik</li>
+        <li>Restart router atau modem</li>
+      </ul>
+    </div>
+    
+    <button class="btn" onclick="window.location.reload()">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+      </svg>
+      Coba Lagi
+    </button>
+    
+    <p class="footer">
+      Dinas Kesehatan Kabupaten Morowali Utara
+    </p>
+  </div>
+</body>
+</html>

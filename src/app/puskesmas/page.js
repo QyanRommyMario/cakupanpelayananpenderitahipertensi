@@ -113,7 +113,10 @@ export default function PuskesmasPage() {
       setData(achievementsRes.data || []);
       setPuskesmasMaster(puskesmasRes.data || []);
     } catch (err) {
-      console.error("Error fetching data:", err);
+      // Silent error di production
+      if (process.env.NODE_ENV === "development") {
+        console.error("Error fetching data:", err);
+      }
     } finally {
       setLoading(false);
     }
@@ -420,8 +423,8 @@ export default function PuskesmasPage() {
               </div>
             </div>
 
-            <div className="h-[420px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-[420px] min-h-[400px] w-full">
+              <ResponsiveContainer width="100%" height="100%" minHeight={400}>
                 <BarChart
                   data={chartData}
                   margin={{ top: 20, right: 30, left: 20, bottom: 60 }}

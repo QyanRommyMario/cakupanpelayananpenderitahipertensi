@@ -1,6 +1,7 @@
 {
-  "name": "cakupanpelayananpenderitahipertensi",
-  "version": "0.1.0",
+  "name": "smart-ptm-morowali-utara",
+  "version": "1.0.0",
+  "description": "Sistem Monitoring Aktual dan Real Time Penyakit Tidak Menular - Dinas Kesehatan Kabupaten Morowali Utara",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -13,15 +14,16 @@
     "@supabase/supabase-js": "^2.90.1",
     "jspdf": "^4.0.0",
     "jspdf-autotable": "^5.0.7",
-    "next": "14.2.35",
+    "next": "^16.1.6",
+    "next-pwa": "^5.6.0",
     "react": "^18",
     "react-dom": "^18",
     "recharts": "^3.6.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "eslint": "^8",
-    "eslint-config-next": "14.2.35",
+    "eslint": "^9.39.2",
+    "eslint-config-next": "^16.1.6",
     "postcss": "^8",
     "tailwindcss": "^3.4.1"
   }

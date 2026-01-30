@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { isValidProgramType } from "@/utils/constants";
+import logger from "./logger";
 
 /**
  * Fetch unique indicators from achievements table
@@ -23,7 +24,7 @@ export async function getUniqueIndicators(programType = null) {
   const { data, error } = await query;
 
   if (error) {
-    console.error("Error fetching indicators:", error);
+    logger.apiError("getUniqueIndicators", error);
     throw error;
   }
 
@@ -63,7 +64,7 @@ export async function getAllPuskesmas(excludeKab = false) {
   const { data, error } = await query;
 
   if (error) {
-    console.error("Error fetching puskesmas:", error);
+    logger.apiError("getAllPuskesmas", error);
     throw error;
   }
 
@@ -83,7 +84,7 @@ export async function getPuskesmasByCode(code) {
     .single();
 
   if (error) {
-    console.error("Error fetching puskesmas by code:", error);
+    logger.apiError("getPuskesmasByCode", error, { code });
     return null;
   }
 
@@ -131,7 +132,7 @@ export async function getAchievements(
   const { data, error } = await query;
 
   if (error) {
-    console.error("Error fetching achievements:", error);
+    logger.apiError("getAchievements", error, { puskesmasCode, period, programType });
     throw error;
   }
 
@@ -146,7 +147,7 @@ export async function getUniquePeriods() {
   const { data, error } = await supabase.from("achievements").select("period");
 
   if (error) {
-    console.error("Error fetching periods:", error);
+    logger.apiError("getUniquePeriods", error);
     throw error;
   }
 
@@ -186,7 +187,7 @@ export async function upsertAchievements(records) {
   });
 
   if (error) {
-    console.error("Error upserting achievements:", error);
+    logger.apiError("upsertAchievements", error);
     return { success: false, error: error.message };
   }
 
@@ -344,7 +345,7 @@ export async function getGlobalSummary(
     const { data: achievements, error } = await query;
 
     if (error) {
-      console.error("Error fetching global summary:", error);
+      logger.apiError("getGlobalSummary", error, { period, puskesmasCode });
       throw error;
     }
 
@@ -500,7 +501,7 @@ export async function getGlobalSummary(
       },
     };
   } catch (err) {
-    console.error("getGlobalSummary error:", err);
+    logger.error("getGlobalSummary failed", err);
     throw err;
   }
 }
@@ -616,7 +617,7 @@ export async function getProgramDetailData(
       })
       .sort((a, b) => a.percentage - b.percentage); // Worst first
   } catch (err) {
-    console.error("getProgramDetailData error:", err);
+    logger.error("getProgramDetailData failed", err, { programType });
     throw err;
   }
 }

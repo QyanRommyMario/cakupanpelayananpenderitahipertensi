@@ -341,7 +341,10 @@ export const isValidProgramType = (type) => {
 // Mendapatkan konfigurasi program berdasarkan ID
 export const getProgram = (programId) => {
   if (!isValidProgramType(programId)) {
-    console.error(`getProgram: programId tidak valid: "${programId}"`);
+    // Silent fallback di production, hanya log di development
+    if (process.env.NODE_ENV === "development") {
+      console.warn(`getProgram: programId tidak valid: "${programId}"`);
+    }
     return PROGRAMS.HIPERTENSI; // Fallback ke Hipertensi
   }
   return PROGRAMS[programId];

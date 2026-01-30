@@ -15,6 +15,8 @@ import {
 } from "recharts";
 import DashboardLayout from "@/components/DashboardLayout";
 import { supabase } from "@/lib/supabase";
+import { EmptyState, DashboardSkeleton } from "@/components/LoadingStates";
+import logger from "@/lib/logger";
 import {
   generateTriwulanOptions,
   getCurrentPeriod,
@@ -113,7 +115,7 @@ export default function ProgramDashboard({ programType, title }) {
           }
         }
       } catch (err) {
-        console.error("Error fetching user session:", err);
+        logger.error("Error fetching user session", err);
       } finally {
         setUserLoaded(true); // Mark user info as loaded
       }
@@ -135,7 +137,7 @@ export default function ProgramDashboard({ programType, title }) {
         if (error) throw error;
         setPuskesmasMaster(pkmData || []);
       } catch (err) {
-        console.error("Error fetching master data:", err);
+        logger.error("Error fetching master data", err);
       } finally {
         setLoading(false);
       }
@@ -178,7 +180,7 @@ export default function ProgramDashboard({ programType, title }) {
         if (error) throw error;
         setData(achievements || []);
       } catch (err) {
-        console.error("Error fetching data:", err);
+        logger.error("Error fetching data", err, { programType, selectedPeriod });
       } finally {
         setLoadingData(false);
       }
@@ -824,8 +826,8 @@ export default function ProgramDashboard({ programType, title }) {
               <p className="text-sm text-gray-500 mb-4">
                 Perbandingan jumlah yang sudah dan belum terlayani
               </p>
-              <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="h-[300px] min-h-[280px]">
+                <ResponsiveContainer width="100%" height="100%" minHeight={280}>
                   <PieChart>
                     <Pie
                       data={pieChartData}
@@ -882,8 +884,8 @@ export default function ProgramDashboard({ programType, title }) {
               <p className="text-sm text-gray-500 mb-4">
                 Puskesmas dengan persentase capaian tertinggi
               </p>
-              <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="h-[300px] min-h-[280px]">
+                <ResponsiveContainer width="100%" height="100%" minHeight={280}>
                   <BarChart
                     data={top5Puskesmas}
                     layout="vertical"

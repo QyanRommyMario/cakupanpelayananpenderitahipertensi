@@ -1,0 +1,39 @@
+{
+  "name": "SMART PTM - Sistem Monitoring Aktual Real Time Penyakit Tidak Menular",
+  "short_name": "SMART PTM",
+  "description": "Sistem Monitoring Aktual dan Real Time Penyakit Tidak Menular Dinas Kesehatan Kabupaten Morowali Utara",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f8fafc",
+  "theme_color": "#1e40af",
+  "scope": "/",
+  "lang": "id-ID",
+  "categories": ["health", "medical", "government"],
+  "icons": [
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Input Data Capaian",
+      "short_name": "Input Data",
+      "description": "Masukkan data capaian pelayanan",
+      "url": "/input",
+      "icons": [{ "src": "/icons/icon-512x512.png", "sizes": "512x512" }]
+    },
+    {
+      "name": "Laporan & Ekspor",
+      "short_name": "Laporan",
+      "description": "Lihat dan ekspor laporan",
+      "url": "/laporan",
+      "icons": [{ "src": "/icons/icon-512x512.png", "sizes": "512x512" }]
+    }
+  ],
+  "related_applications": [],
+  "prefer_related_applications": false
+}
