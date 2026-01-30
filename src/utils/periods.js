@@ -1,71 +1,90 @@
 /**
  * Period Utility Functions
- * Generates quarterly (Triwulan) period options for SPM Dashboard
+ * Generates monthly period options for SPM Dashboard
+ * Updated: Support monthly periods until end of 2026
  */
 
 /**
- * Generate array of quarterly period options
- * Format: ['TW1-2025', 'TW2-2025', 'TW3-2025', 'TW4-2025', ...]
- * Covers: Previous year, current year, and next year + Annual recap options
+ * Generate array of monthly period options
+ * Format: ['2025-01', '2025-02', ..., '2026-12']
+ * Covers: From January 2025 to December 2026 + Annual recap options
  *
- * @returns {Array<{value: string, label: string, type: 'quarter'|'annual'}>}
+ * @returns {Array<{value: string, label: string, type: 'month'|'annual'}>}
  */
 export function generateTriwulanOptions() {
-  const currentYear = new Date().getFullYear();
-  const years = [currentYear - 1, currentYear, currentYear + 1];
-
   const options = [];
+  const monthNames = [
+    "Januari",
+    "Februari",
+    "Maret",
+    "April",
+    "Mei",
+    "Juni",
+    "Juli",
+    "Agustus",
+    "September",
+    "Oktober",
+    "November",
+    "Desember",
+  ];
 
-  // Generate quarters for each year
+  // Generate months from 2025 to 2026 only
+  const years = [2025, 2026];
+
   years.forEach((year) => {
-    for (let tw = 1; tw <= 4; tw++) {
-      options.push({
-        value: `TW${tw}-${year}`,
-        label: `Triwulan ${tw} Tahun ${year}`,
-        type: "quarter",
-        year: year,
-        quarter: tw,
-      });
-    }
-
-    // Add annual recap option for each year
+    // Add annual recap option at the beginning of each year
     options.push({
       value: `REKAP-${year}`,
       label: `📊 REKAP TAHUN ${year}`,
       type: "annual",
       year: year,
-      quarter: null,
+      month: null,
     });
+
+    // Generate all 12 months for each year
+    for (let month = 1; month <= 12; month++) {
+      const monthStr = month.toString().padStart(2, "0");
+      options.push({
+        value: `${year}-${monthStr}`,
+        label: `${monthNames[month - 1]} ${year}`,
+        type: "month",
+        year: year,
+        month: month,
+      });
+    }
   });
 
   return options;
 }
 
 /**
- * Get current quarter based on current date
- * Q1: Jan-Mar, Q2: Apr-Jun, Q3: Jul-Sep, Q4: Oct-Dec
+ * Get current month period based on current date
  *
- * @returns {string} Current period value (e.g., 'TW1-2026')
+ * @returns {string} Current period value (e.g., '2026-01')
  */
 export function getCurrentPeriod() {
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1; // 1-12
 
-  let quarter;
-  if (month <= 3) quarter = 1;
-  else if (month <= 6) quarter = 2;
-  else if (month <= 9) quarter = 3;
-  else quarter = 4;
+  // If current year is beyond 2026, default to Dec 2026
+  if (year > 2026) {
+    return "2026-12";
+  }
+  // If current year is before 2025, default to Jan 2025
+  if (year < 2025) {
+    return "2025-01";
+  }
 
-  return `TW${quarter}-${year}`;
+  const monthStr = month.toString().padStart(2, "0");
+  return `${year}-${monthStr}`;
 }
 
 /**
  * Parse period string to get components
  *
- * @param {string} period - Period string (e.g., 'TW1-2025' or 'REKAP-2025')
- * @returns {{type: string, year: number, quarter: number|null, label: string}}
+ * @param {string} period - Period string (e.g., '2025-01' or 'REKAP-2025')
+ * @returns {{type: string, year: number, month: number|null, label: string}}
  */
 export function parsePeriod(period) {
   if (!period) return null;
@@ -75,19 +94,50 @@ export function parsePeriod(period) {
     return {
       type: "annual",
       year: year,
+      month: null,
       quarter: null,
       label: `Rekap Tahun ${year}`,
     };
   }
 
-  const match = period.match(/^TW(\d)-(\d{4})$/);
-  if (match) {
-    const quarter = parseInt(match[1]);
-    const year = parseInt(match[2]);
+  // Monthly format: YYYY-MM
+  const monthMatch = period.match(/^(\d{4})-(\d{2})$/);
+  if (monthMatch) {
+    const year = parseInt(monthMatch[1]);
+    const month = parseInt(monthMatch[2]);
+    const monthNames = [
+      "Januari",
+      "Februari",
+      "Maret",
+      "April",
+      "Mei",
+      "Juni",
+      "Juli",
+      "Agustus",
+      "September",
+      "Oktober",
+      "November",
+      "Desember",
+    ];
+    return {
+      type: "month",
+      year: year,
+      month: month,
+      quarter: null,
+      label: `${monthNames[month - 1]} ${year}`,
+    };
+  }
+
+  // Legacy Triwulan format: TW1-2025
+  const twMatch = period.match(/^TW(\d)-(\d{4})$/);
+  if (twMatch) {
+    const quarter = parseInt(twMatch[1]);
+    const year = parseInt(twMatch[2]);
     return {
       type: "quarter",
       year: year,
       quarter: quarter,
+      month: null,
       label: `Triwulan ${quarter} ${year}`,
     };
   }
@@ -106,13 +156,19 @@ export function isAnnualPeriod(period) {
 }
 
 /**
- * Get all quarterly periods for a specific year (for annual recap calculation)
+ * Get all monthly periods for a specific year (for annual recap calculation)
  *
- * @param {number} year - Year to get quarters for
- * @returns {string[]} Array of quarter period strings
+ * @param {number} year - Year to get months for
+ * @returns {string[]} Array of monthly period strings
  */
 export function getQuartersForYear(year) {
-  return [`TW1-${year}`, `TW2-${year}`, `TW3-${year}`, `TW4-${year}`];
+  // Return all 12 months for the year
+  const months = [];
+  for (let m = 1; m <= 12; m++) {
+    const monthStr = m.toString().padStart(2, "0");
+    months.push(`${year}-${monthStr}`);
+  }
+  return months;
 }
 
 /**
@@ -132,19 +188,29 @@ export function getPeriodDateRange(period) {
     };
   }
 
-  // Quarter date ranges
-  const quarterMonths = {
-    1: { start: 0, end: 2 }, // Jan-Mar
-    2: { start: 3, end: 5 }, // Apr-Jun
-    3: { start: 6, end: 8 }, // Jul-Sep
-    4: { start: 9, end: 11 }, // Oct-Dec
-  };
+  if (parsed.type === "month") {
+    return {
+      start: new Date(parsed.year, parsed.month - 1, 1),
+      end: new Date(parsed.year, parsed.month, 0), // Last day of month
+    };
+  }
 
-  const months = quarterMonths[parsed.quarter];
-  return {
-    start: new Date(parsed.year, months.start, 1),
-    end: new Date(parsed.year, months.end + 1, 0), // Last day of end month
-  };
+  // Legacy quarter support
+  if (parsed.type === "quarter") {
+    const quarterMonths = {
+      1: { start: 0, end: 2 },
+      2: { start: 3, end: 5 },
+      3: { start: 6, end: 8 },
+      4: { start: 9, end: 11 },
+    };
+    const months = quarterMonths[parsed.quarter];
+    return {
+      start: new Date(parsed.year, months.start, 1),
+      end: new Date(parsed.year, months.end + 1, 0),
+    };
+  }
+
+  return null;
 }
 
 /**
@@ -161,12 +227,35 @@ export function formatPeriodLabel(period) {
     return `Rekap Tahunan ${parsed.year}`;
   }
 
-  const quarterNames = [
-    "",
-    "Januari - Maret",
-    "April - Juni",
-    "Juli - September",
-    "Oktober - Desember",
-  ];
-  return `Triwulan ${parsed.quarter} (${quarterNames[parsed.quarter]}) ${parsed.year}`;
+  if (parsed.type === "month") {
+    const monthNames = [
+      "Januari",
+      "Februari",
+      "Maret",
+      "April",
+      "Mei",
+      "Juni",
+      "Juli",
+      "Agustus",
+      "September",
+      "Oktober",
+      "November",
+      "Desember",
+    ];
+    return `${monthNames[parsed.month - 1]} ${parsed.year}`;
+  }
+
+  // Legacy quarter
+  if (parsed.type === "quarter") {
+    const quarterNames = [
+      "",
+      "Januari - Maret",
+      "April - Juni",
+      "Juli - September",
+      "Oktober - Desember",
+    ];
+    return `Triwulan ${parsed.quarter} (${quarterNames[parsed.quarter]}) ${parsed.year}`;
+  }
+
+  return period;
 }

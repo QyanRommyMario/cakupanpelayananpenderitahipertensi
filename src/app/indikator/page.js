@@ -38,15 +38,36 @@ export default function IndikatorPage() {
   const [loadingData, setLoadingData] = useState(false);
   const [rawData, setRawData] = useState([]);
   const [puskesmasMaster, setPuskesmasMaster] = useState([]);
-  
+
+  // KEAMANAN: User & Role State
+  const [currentUser, setCurrentUser] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [userPuskesmasCode, setUserPuskesmasCode] = useState(null);
+  const [userLoaded, setUserLoaded] = useState(false); // PENTING: Track user loading
+
   // Filters
-  const [selectedProgram, setSelectedProgram] = useState(PROGRAM_TYPES.HIPERTENSI);
+  const [selectedProgram, setSelectedProgram] = useState(
+    PROGRAM_TYPES.HIPERTENSI,
+  );
   const [selectedIndicator, setSelectedIndicator] = useState("");
   const [selectedPeriod, setSelectedPeriod] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortConfig, setSortConfig] = useState({ key: "gap", direction: "desc" });
+  const [sortConfig, setSortConfig] = useState({
+    key: "gap",
+    direction: "desc",
+  });
 
   const periodOptions = useMemo(() => generateTriwulanOptions(), []);
+
+  // Helper: Check if user is admin based on email
+  const checkIsAdmin = (email) => {
+    const adminEmails = [
+      "kab@dinkes.go.id",
+      "admin@dinkes.go.id",
+      "admin@example.com",
+    ];
+    return adminEmails.includes(email?.toLowerCase());
+  };
 
   // Get indicator options based on selected program
   const indicatorOptions = useMemo(() => {
@@ -56,25 +77,53 @@ export default function IndikatorPage() {
   // Initialize
   useEffect(() => {
     async function init() {
-      const { data: pkm } = await supabase.from("puskesmas").select("*").order("name");
-      setPuskesmasMaster(pkm || []);
-      setSelectedPeriod(getCurrentPeriod());
-      setLoading(false);
+      try {
+        // KEAMANAN: Get user session
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (session) {
+          setCurrentUser(session.user);
+          const adminStatus = checkIsAdmin(session.user.email);
+          setIsAdmin(adminStatus);
+
+          if (!adminStatus) {
+            const emailCode = session.user.email.split("@")[0].toUpperCase();
+            setUserPuskesmasCode(emailCode);
+          }
+        }
+
+        const { data: pkm } = await supabase
+          .from("puskesmas")
+          .select("*")
+          .order("name");
+        setPuskesmasMaster(pkm || []);
+        setSelectedPeriod(getCurrentPeriod());
+      } finally {
+        setUserLoaded(true); // PENTING: Set setelah user info ter-load
+        setLoading(false);
+      }
     }
     init();
   }, []);
 
   // Set default indicator when program changes
   useEffect(() => {
-    if (indicatorOptions.length > 0 && !indicatorOptions.includes(selectedIndicator)) {
+    if (
+      indicatorOptions.length > 0 &&
+      !indicatorOptions.includes(selectedIndicator)
+    ) {
       setSelectedIndicator(indicatorOptions[0]);
     }
   }, [selectedProgram, indicatorOptions, selectedIndicator]);
 
   // Fetch data when filters change
+  // KEAMANAN: Filter berdasarkan role user
   useEffect(() => {
     async function fetchData() {
-      if (!selectedPeriod || !selectedIndicator) return;
+      // PENTING: Tunggu sampai user info ter-load
+      if (!selectedPeriod || !selectedIndicator || !userLoaded) return;
 
       try {
         setLoadingData(true);
@@ -85,6 +134,11 @@ export default function IndikatorPage() {
           .eq("program_type", selectedProgram)
           .eq("indicator_name", selectedIndicator)
           .neq("puskesmas_code", "KAB");
+
+        // KEAMANAN: Non-admin hanya bisa melihat data puskesmas sendiri
+        if (!isAdmin && userPuskesmasCode) {
+          query = query.eq("puskesmas_code", userPuskesmasCode);
+        }
 
         if (isAnnualPeriod(selectedPeriod)) {
           const parsed = parsePeriod(selectedPeriod);
@@ -105,7 +159,14 @@ export default function IndikatorPage() {
     }
 
     fetchData();
-  }, [selectedProgram, selectedIndicator, selectedPeriod]);
+  }, [
+    selectedProgram,
+    selectedIndicator,
+    selectedPeriod,
+    isAdmin,
+    userPuskesmasCode,
+    userLoaded,
+  ]);
 
   // Process data per Puskesmas
   const processedData = useMemo(() => {
@@ -120,19 +181,21 @@ export default function IndikatorPage() {
         };
       }
       pkmMap[row.puskesmas_code].target += parseFloat(row.target_qty) || 0;
-      pkmMap[row.puskesmas_code].realization += parseFloat(row.realization_qty) || 0;
+      pkmMap[row.puskesmas_code].realization +=
+        parseFloat(row.realization_qty) || 0;
     });
 
     return Object.values(pkmMap).map((p) => {
       const pkm = puskesmasMaster.find((m) => m.code === p.code);
       const gap = Math.max(0, p.target - p.realization);
-      const percentage = p.target > 0 ? ((p.realization / p.target) * 100) : null;
-      
+      const percentage = p.target > 0 ? (p.realization / p.target) * 100 : null;
+
       return {
         ...p,
         name: pkm?.name || p.code,
         gap,
-        percentage: percentage !== null ? parseFloat(percentage.toFixed(1)) : null,
+        percentage:
+          percentage !== null ? parseFloat(percentage.toFixed(1)) : null,
       };
     });
   }, [rawData, puskesmasMaster]);
@@ -144,7 +207,8 @@ export default function IndikatorPage() {
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(
-        (p) => p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q)
+        (p) =>
+          p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q),
       );
     }
 
@@ -163,13 +227,29 @@ export default function IndikatorPage() {
   // Summary stats
   const summary = useMemo(() => {
     const totalTarget = processedData.reduce((sum, p) => sum + p.target, 0);
-    const totalRealization = processedData.reduce((sum, p) => sum + p.realization, 0);
+    const totalRealization = processedData.reduce(
+      (sum, p) => sum + p.realization,
+      0,
+    );
     const totalGap = processedData.reduce((sum, p) => sum + p.gap, 0);
-    const avgPercentage = totalTarget > 0 ? ((totalRealization / totalTarget) * 100).toFixed(1) : "N/A";
+    const avgPercentage =
+      totalTarget > 0
+        ? ((totalRealization / totalTarget) * 100).toFixed(1)
+        : "N/A";
     const pkmWithGap = processedData.filter((p) => p.gap > 0).length;
-    const pkmComplete = processedData.filter((p) => p.percentage !== null && p.percentage >= 100).length;
+    const pkmComplete = processedData.filter(
+      (p) => p.percentage !== null && p.percentage >= 100,
+    ).length;
 
-    return { totalTarget, totalRealization, totalGap, avgPercentage, pkmWithGap, pkmComplete, total: processedData.length };
+    return {
+      totalTarget,
+      totalRealization,
+      totalGap,
+      avgPercentage,
+      pkmWithGap,
+      pkmComplete,
+      total: processedData.length,
+    };
   }, [processedData]);
 
   // Chart data - sorted by worst first
@@ -194,17 +274,26 @@ export default function IndikatorPage() {
 
   // Color for percentage
   const getPercentageColor = (pct) => {
-    if (pct === null) return { bg: "bg-gray-100", text: "text-gray-500", bar: "#9ca3af" };
-    if (pct >= 100) return { bg: "bg-emerald-100", text: "text-emerald-800", bar: "#10b981" };
-    if (pct >= 80) return { bg: "bg-emerald-50", text: "text-emerald-700", bar: "#34d399" };
-    if (pct >= 50) return { bg: "bg-amber-100", text: "text-amber-800", bar: "#f59e0b" };
+    if (pct === null)
+      return { bg: "bg-gray-100", text: "text-gray-500", bar: "#9ca3af" };
+    if (pct >= 100)
+      return { bg: "bg-emerald-100", text: "text-emerald-800", bar: "#10b981" };
+    if (pct >= 80)
+      return { bg: "bg-emerald-50", text: "text-emerald-700", bar: "#34d399" };
+    if (pct >= 50)
+      return { bg: "bg-amber-100", text: "text-amber-800", bar: "#f59e0b" };
     return { bg: "bg-red-100", text: "text-red-800", bar: "#ef4444" };
   };
 
   // Sort icon
   const SortIcon = ({ columnKey }) => {
-    if (sortConfig.key !== columnKey) return <span className="text-gray-400 ml-1">↕</span>;
-    return <span className="text-yellow-400 ml-1">{sortConfig.direction === "asc" ? "↑" : "↓"}</span>;
+    if (sortConfig.key !== columnKey)
+      return <span className="text-gray-400 ml-1">↕</span>;
+    return (
+      <span className="text-yellow-400 ml-1">
+        {sortConfig.direction === "asc" ? "↑" : "↓"}
+      </span>
+    );
   };
 
   // Custom tooltip
@@ -215,11 +304,31 @@ export default function IndikatorPage() {
         <div className="bg-white p-4 rounded-xl shadow-xl border border-gray-200 text-sm">
           <p className="font-bold text-gray-800 mb-2">{d.name}</p>
           <div className="space-y-1">
-            <p>Kebutuhan (Target): <span className="font-semibold">{d.target.toLocaleString("id-ID")}</span></p>
-            <p>Ketersediaan (Realisasi): <span className="font-semibold text-emerald-600">{d.realization.toLocaleString("id-ID")}</span></p>
-            <p>Kekurangan (Gap): <span className={`font-semibold ${d.gap > 0 ? "text-red-600" : "text-emerald-600"}`}>{d.gap.toLocaleString("id-ID")}</span></p>
+            <p>
+              Kebutuhan (Target):{" "}
+              <span className="font-semibold">
+                {d.target.toLocaleString("id-ID")}
+              </span>
+            </p>
+            <p>
+              Ketersediaan (Realisasi):{" "}
+              <span className="font-semibold text-emerald-600">
+                {d.realization.toLocaleString("id-ID")}
+              </span>
+            </p>
+            <p>
+              Kekurangan (Gap):{" "}
+              <span
+                className={`font-semibold ${d.gap > 0 ? "text-red-600" : "text-emerald-600"}`}
+              >
+                {d.gap.toLocaleString("id-ID")}
+              </span>
+            </p>
             <p className="pt-2 border-t mt-2">
-              % Terpenuhi: <span className={`font-bold ${d.percentage >= 100 ? "text-emerald-600" : d.percentage >= 50 ? "text-amber-600" : "text-red-600"}`}>
+              % Terpenuhi:{" "}
+              <span
+                className={`font-bold ${d.percentage >= 100 ? "text-emerald-600" : d.percentage >= 50 ? "text-amber-600" : "text-red-600"}`}
+              >
                 {d.percentage !== null ? `${d.percentage}%` : "N/A"}
               </span>
             </p>
@@ -268,7 +377,9 @@ export default function IndikatorPage() {
               <div className="flex flex-wrap items-end gap-4">
                 {/* Program Filter */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Program SPM</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Program SPM
+                  </label>
                   <select
                     value={selectedProgram}
                     onChange={(e) => setSelectedProgram(e.target.value)}
@@ -284,7 +395,9 @@ export default function IndikatorPage() {
 
                 {/* Indicator Filter */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Nama Indikator</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Nama Indikator
+                  </label>
                   <select
                     value={selectedIndicator}
                     onChange={(e) => setSelectedIndicator(e.target.value)}
@@ -300,7 +413,9 @@ export default function IndikatorPage() {
 
                 {/* Period Filter */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Periode</label>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Periode
+                  </label>
                   <select
                     value={selectedPeriod}
                     onChange={(e) => setSelectedPeriod(e.target.value)}
@@ -321,7 +436,9 @@ export default function IndikatorPage() {
             </div>
 
             {/* Selected Indicator Info */}
-            <div className={`mt-6 p-4 rounded-xl ${theme.bgLighter} border ${theme.border}`}>
+            <div
+              className={`mt-6 p-4 rounded-xl ${theme.bgLighter} border ${theme.border}`}
+            >
               <div className="flex items-center gap-3">
                 <span className="text-3xl">{programConfig.icon}</span>
                 <div>
@@ -329,10 +446,17 @@ export default function IndikatorPage() {
                     {selectedIndicator || "Pilih Indikator"}
                   </h2>
                   <p className="text-sm text-gray-600 mt-1">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${isPartA ? "bg-blue-100 text-blue-800" : "bg-slate-200 text-slate-700"}`}>
-                      {isPartA ? "📊 Bagian A: Sasaran Manusia" : "🔧 Bagian B: Sumber Daya (Barang/Jasa/SDM)"}
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${isPartA ? "bg-blue-100 text-blue-800" : "bg-slate-200 text-slate-700"}`}
+                    >
+                      {isPartA
+                        ? "📊 Bagian A: Sasaran Manusia"
+                        : "🔧 Bagian B: Sumber Daya (Barang/Jasa/SDM)"}
                     </span>
-                    <span className="ml-2">• Periode: <strong>{formatPeriodLabel(selectedPeriod)}</strong></span>
+                    <span className="ml-2">
+                      • Periode:{" "}
+                      <strong>{formatPeriodLabel(selectedPeriod)}</strong>
+                    </span>
                   </p>
                 </div>
               </div>
@@ -344,33 +468,61 @@ export default function IndikatorPage() {
           {/* ============================================ */}
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-              <p className="text-xs font-medium text-gray-500 uppercase">Total Kebutuhan</p>
-              <p className="text-2xl font-bold text-slate-700 mt-1">{summary.totalTarget.toLocaleString("id-ID")}</p>
+              <p className="text-xs font-medium text-gray-500 uppercase">
+                Total Kebutuhan
+              </p>
+              <p className="text-2xl font-bold text-slate-700 mt-1">
+                {summary.totalTarget.toLocaleString("id-ID")}
+              </p>
             </div>
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-              <p className="text-xs font-medium text-gray-500 uppercase">Total Tersedia</p>
-              <p className="text-2xl font-bold text-emerald-600 mt-1">{summary.totalRealization.toLocaleString("id-ID")}</p>
+              <p className="text-xs font-medium text-gray-500 uppercase">
+                Total Tersedia
+              </p>
+              <p className="text-2xl font-bold text-emerald-600 mt-1">
+                {summary.totalRealization.toLocaleString("id-ID")}
+              </p>
             </div>
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-              <p className="text-xs font-medium text-gray-500 uppercase">Total Kekurangan</p>
-              <p className={`text-2xl font-bold mt-1 ${summary.totalGap > 0 ? "text-red-600" : "text-emerald-600"}`}>
+              <p className="text-xs font-medium text-gray-500 uppercase">
+                Total Kekurangan
+              </p>
+              <p
+                className={`text-2xl font-bold mt-1 ${summary.totalGap > 0 ? "text-red-600" : "text-emerald-600"}`}
+              >
                 {summary.totalGap.toLocaleString("id-ID")}
               </p>
             </div>
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-              <p className="text-xs font-medium text-gray-500 uppercase">Rata-rata Capaian</p>
-              <p className={`text-2xl font-bold mt-1 ${parseFloat(summary.avgPercentage) >= 100 ? "text-emerald-600" : "text-amber-600"}`}>
-                {summary.avgPercentage === "N/A" ? "N/A" : `${summary.avgPercentage}%`}
+              <p className="text-xs font-medium text-gray-500 uppercase">
+                Rata-rata Capaian
+              </p>
+              <p
+                className={`text-2xl font-bold mt-1 ${parseFloat(summary.avgPercentage) >= 100 ? "text-emerald-600" : "text-amber-600"}`}
+              >
+                {summary.avgPercentage === "N/A"
+                  ? "N/A"
+                  : `${summary.avgPercentage}%`}
               </p>
             </div>
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-              <p className="text-xs font-medium text-gray-500 uppercase">PKM Terpenuhi</p>
-              <p className="text-2xl font-bold text-emerald-600 mt-1">{summary.pkmComplete} <span className="text-sm text-gray-400">/ {summary.total}</span></p>
+              <p className="text-xs font-medium text-gray-500 uppercase">
+                PKM Terpenuhi
+              </p>
+              <p className="text-2xl font-bold text-emerald-600 mt-1">
+                {summary.pkmComplete}{" "}
+                <span className="text-sm text-gray-400">/ {summary.total}</span>
+              </p>
             </div>
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-              <p className="text-xs font-medium text-gray-500 uppercase">PKM Kekurangan</p>
-              <p className={`text-2xl font-bold mt-1 ${summary.pkmWithGap > 0 ? "text-red-600" : "text-emerald-600"}`}>
-                {summary.pkmWithGap} <span className="text-sm text-gray-400">/ {summary.total}</span>
+              <p className="text-xs font-medium text-gray-500 uppercase">
+                PKM Kekurangan
+              </p>
+              <p
+                className={`text-2xl font-bold mt-1 ${summary.pkmWithGap > 0 ? "text-red-600" : "text-emerald-600"}`}
+              >
+                {summary.pkmWithGap}{" "}
+                <span className="text-sm text-gray-400">/ {summary.total}</span>
               </p>
             </div>
           </div>
@@ -385,24 +537,52 @@ export default function IndikatorPage() {
                   📊 Perbandingan Ketersediaan di Seluruh Puskesmas
                 </h2>
                 <p className="text-sm text-gray-500 mt-1">
-                  Visualisasi % terpenuhi per Puskesmas untuk indikator: <strong>{selectedIndicator}</strong>
+                  Visualisasi % terpenuhi per Puskesmas untuk indikator:{" "}
+                  <strong>{selectedIndicator}</strong>
                 </p>
               </div>
               <div className="p-4">
-                <div style={{ height: Math.max(300, chartData.length * 40), minWidth: 600 }}>
+                <div
+                  style={{
+                    height: Math.max(300, chartData.length * 40),
+                    minWidth: 600,
+                  }}
+                >
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
                       data={chartData}
                       layout="vertical"
                       margin={{ top: 10, right: 60, left: 120, bottom: 10 }}
                     >
-                      <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e5e7eb" />
-                      <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: "#6b7280" }} tickFormatter={(v) => `${v}%`} />
-                      <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "#374151" }} width={110} />
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        horizontal={true}
+                        vertical={false}
+                        stroke="#e5e7eb"
+                      />
+                      <XAxis
+                        type="number"
+                        domain={[0, 100]}
+                        tick={{ fontSize: 11, fill: "#6b7280" }}
+                        tickFormatter={(v) => `${v}%`}
+                      />
+                      <YAxis
+                        type="category"
+                        dataKey="name"
+                        tick={{ fontSize: 11, fill: "#374151" }}
+                        width={110}
+                      />
                       <Tooltip content={<CustomTooltip />} />
-                      <Bar dataKey="percentage" radius={[0, 4, 4, 0]} maxBarSize={25}>
+                      <Bar
+                        dataKey="percentage"
+                        radius={[0, 4, 4, 0]}
+                        maxBarSize={25}
+                      >
                         {chartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={getPercentageColor(entry.percentage).bar} />
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={getPercentageColor(entry.percentage).bar}
+                          />
                         ))}
                       </Bar>
                     </BarChart>
@@ -419,9 +599,12 @@ export default function IndikatorPage() {
             <div className="px-6 py-4 bg-slate-800 text-white">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
-                  <h2 className="text-lg font-bold">📋 Tabel Detail Per Puskesmas</h2>
+                  <h2 className="text-lg font-bold">
+                    📋 Tabel Detail Per Puskesmas
+                  </h2>
                   <p className="text-slate-300 text-sm mt-1">
-                    Klik header untuk mengurutkan • Total {filteredAndSortedData.length} Puskesmas
+                    Klik header untuk mengurutkan • Total{" "}
+                    {filteredAndSortedData.length} Puskesmas
                   </p>
                 </div>
                 <div className="relative">
@@ -432,8 +615,18 @@ export default function IndikatorPage() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:ring-2 focus:ring-blue-500 w-64"
                   />
-                  <svg className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  <svg
+                    className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                    />
                   </svg>
                 </div>
               </div>
@@ -468,51 +661,62 @@ export default function IndikatorPage() {
               <table className="w-full">
                 <thead className="sticky top-0 z-10">
                   <tr className="bg-slate-700 text-white">
-                    <th className="px-4 py-3 text-center text-sm font-semibold w-14">#</th>
-                    <th 
+                    <th className="px-4 py-3 text-center text-sm font-semibold w-14">
+                      #
+                    </th>
+                    <th
                       className="px-4 py-3 text-left text-sm font-semibold cursor-pointer hover:bg-slate-600 transition-colors"
                       onClick={() => handleSort("name")}
                     >
                       Puskesmas <SortIcon columnKey="name" />
                     </th>
-                    <th 
+                    <th
                       className="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-slate-600 transition-colors min-w-[140px]"
                       onClick={() => handleSort("target")}
                     >
                       Kebutuhan (Target) <SortIcon columnKey="target" />
                     </th>
-                    <th 
+                    <th
                       className="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-slate-600 transition-colors min-w-[160px]"
                       onClick={() => handleSort("realization")}
                     >
-                      Ketersediaan (Realisasi) <SortIcon columnKey="realization" />
+                      Ketersediaan (Realisasi){" "}
+                      <SortIcon columnKey="realization" />
                     </th>
-                    <th 
+                    <th
                       className="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-slate-600 transition-colors min-w-[140px]"
                       onClick={() => handleSort("gap")}
                     >
                       Gap (Kekurangan) <SortIcon columnKey="gap" />
                     </th>
-                    <th 
+                    <th
                       className="px-4 py-3 text-center text-sm font-semibold cursor-pointer hover:bg-slate-600 transition-colors min-w-[120px]"
                       onClick={() => handleSort("percentage")}
                     >
                       % Terpenuhi <SortIcon columnKey="percentage" />
                     </th>
-                    <th className="px-4 py-3 text-center text-sm font-semibold min-w-[100px]">Status</th>
+                    <th className="px-4 py-3 text-center text-sm font-semibold min-w-[100px]">
+                      Status
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredAndSortedData.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
-                        {searchQuery ? `Tidak ada Puskesmas dengan nama "${searchQuery}"` : "Tidak ada data untuk filter ini"}
+                      <td
+                        colSpan={7}
+                        className="px-6 py-12 text-center text-gray-500"
+                      >
+                        {searchQuery
+                          ? `Tidak ada Puskesmas dengan nama "${searchQuery}"`
+                          : "Tidak ada data untuk filter ini"}
                       </td>
                     </tr>
                   ) : (
                     filteredAndSortedData.map((pkm, idx) => {
                       const color = getPercentageColor(pkm.percentage);
-                      const isLowPerformer = pkm.percentage !== null && pkm.percentage < 50;
+                      const isLowPerformer =
+                        pkm.percentage !== null && pkm.percentage < 50;
                       return (
                         <tr
                           key={pkm.code}
@@ -523,9 +727,13 @@ export default function IndikatorPage() {
                             hover:bg-blue-50
                           `}
                         >
-                          <td className="px-4 py-3 text-center text-sm text-gray-500 font-medium">{idx + 1}</td>
+                          <td className="px-4 py-3 text-center text-sm text-gray-500 font-medium">
+                            {idx + 1}
+                          </td>
                           <td className="px-4 py-3">
-                            <p className="font-semibold text-gray-800">{pkm.name}</p>
+                            <p className="font-semibold text-gray-800">
+                              {pkm.name}
+                            </p>
                             <p className="text-xs text-gray-500">{pkm.code}</p>
                           </td>
                           <td className="px-4 py-3 text-center text-sm font-semibold text-gray-800 tabular-nums">
@@ -535,22 +743,34 @@ export default function IndikatorPage() {
                             {pkm.realization.toLocaleString("id-ID")}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className={`font-semibold tabular-nums ${pkm.gap > 0 ? "text-red-600" : "text-emerald-600"}`}>
-                              {pkm.gap > 0 ? `-${pkm.gap.toLocaleString("id-ID")}` : "0"}
+                            <span
+                              className={`font-semibold tabular-nums ${pkm.gap > 0 ? "text-red-600" : "text-emerald-600"}`}
+                            >
+                              {pkm.gap > 0
+                                ? `-${pkm.gap.toLocaleString("id-ID")}`
+                                : "0"}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className={`inline-block px-3 py-1 rounded-lg font-bold text-sm ${color.bg} ${color.text}`}>
+                            <span
+                              className={`inline-block px-3 py-1 rounded-lg font-bold text-sm ${color.bg} ${color.text}`}
+                            >
                               {formatPercentage(pkm.percentage)}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
                             {pkm.percentage === null ? (
-                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-600">— N/A</span>
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-600">
+                                — N/A
+                              </span>
                             ) : pkm.percentage >= 100 ? (
-                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">✓ CUKUP</span>
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
+                                ✓ CUKUP
+                              </span>
                             ) : (
-                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800">✗ KURANG</span>
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800">
+                                ✗ KURANG
+                              </span>
                             )}
                           </td>
                         </tr>
@@ -567,14 +787,21 @@ export default function IndikatorPage() {
                 <div className="flex flex-wrap items-center justify-between gap-4 text-sm">
                   <div className="flex items-center gap-6">
                     <span className="text-gray-600">
-                      <strong className="text-emerald-600">{summary.pkmComplete}</strong> Puskesmas terpenuhi (≥100%)
+                      <strong className="text-emerald-600">
+                        {summary.pkmComplete}
+                      </strong>{" "}
+                      Puskesmas terpenuhi (≥100%)
                     </span>
                     <span className="text-gray-600">
-                      <strong className="text-red-600">{summary.pkmWithGap}</strong> Puskesmas kekurangan
+                      <strong className="text-red-600">
+                        {summary.pkmWithGap}
+                      </strong>{" "}
+                      Puskesmas kekurangan
                     </span>
                   </div>
                   <p className="text-gray-500">
-                    Total: <strong>{filteredAndSortedData.length}</strong> Puskesmas
+                    Total: <strong>{filteredAndSortedData.length}</strong>{" "}
+                    Puskesmas
                   </p>
                 </div>
               </div>
@@ -583,7 +810,8 @@ export default function IndikatorPage() {
 
           {/* Footer */}
           <div className="text-center text-xs text-gray-400 py-4">
-            Data diperbarui secara realtime dari Supabase • Dinas Kesehatan Kab. Morowali Utara
+            Data diperbarui secara realtime dari Supabase • Dinas Kesehatan Kab.
+            Morowali Utara
           </div>
         </div>
       </div>

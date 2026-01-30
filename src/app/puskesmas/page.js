@@ -50,17 +50,62 @@ export default function PuskesmasPage() {
     direction: "asc",
   });
 
+  // KEAMANAN: User & Role State
+  const [currentUser, setCurrentUser] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [userPuskesmasCode, setUserPuskesmasCode] = useState(null);
+
+  // Helper: Check if user is admin based on email
+  const checkIsAdmin = (email) => {
+    const adminEmails = [
+      "kab@dinkes.go.id",
+      "admin@dinkes.go.id",
+      "admin@example.com",
+    ];
+    return adminEmails.includes(email?.toLowerCase());
+  };
+
   useEffect(() => {
-    fetchData();
+    async function init() {
+      // KEAMANAN: Get user session first
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      let adminStatus = false;
+      let pkmCode = null;
+
+      if (session) {
+        setCurrentUser(session.user);
+        adminStatus = checkIsAdmin(session.user.email);
+        setIsAdmin(adminStatus);
+
+        if (!adminStatus) {
+          pkmCode = session.user.email.split("@")[0].toUpperCase();
+          setUserPuskesmasCode(pkmCode);
+        }
+      }
+
+      // Then fetch data with role filtering
+      fetchData(adminStatus, pkmCode);
+    }
+    init();
   }, []);
 
-  async function fetchData() {
+  async function fetchData(adminStatus = isAdmin, pkmCode = userPuskesmasCode) {
     try {
+      let achievementsQuery = supabase
+        .from("achievements")
+        .select("*")
+        .order("puskesmas_code", { ascending: true });
+
+      // KEAMANAN: Non-admin hanya melihat data puskesmas sendiri
+      if (!adminStatus && pkmCode) {
+        achievementsQuery = achievementsQuery.eq("puskesmas_code", pkmCode);
+      }
+
       const [achievementsRes, puskesmasRes] = await Promise.all([
-        supabase
-          .from("achievements")
-          .select("*")
-          .order("puskesmas_code", { ascending: true }),
+        achievementsQuery,
         supabase.from("puskesmas").select("*").order("name"),
       ]);
 

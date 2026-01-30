@@ -34,16 +34,25 @@ export default function LaporanPage() {
   // User info
   const [currentUser, setCurrentUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [userLoaded, setUserLoaded] = useState(false); // PENTING: Track user loading
 
   // Filter states
   const [selectedPuskesmas, setSelectedPuskesmas] = useState("");
   const [selectedPeriod, setSelectedPeriod] = useState("");
-  const [selectedProgramType, setSelectedProgramType] = useState(PROGRAM_TYPES.HIPERTENSI); // BARU
+  const [selectedProgramType, setSelectedProgramType] = useState(
+    PROGRAM_TYPES.HIPERTENSI,
+  ); // BARU
   const periodOptions = useMemo(() => generateTriwulanOptions(), []);
 
   // Get program config and indicators dynamically
-  const programConfig = useMemo(() => getProgram(selectedProgramType), [selectedProgramType]);
-  const programIndicators = useMemo(() => getIndicatorsForProgram(selectedProgramType), [selectedProgramType]);
+  const programConfig = useMemo(
+    () => getProgram(selectedProgramType),
+    [selectedProgramType],
+  );
+  const programIndicators = useMemo(
+    () => getIndicatorsForProgram(selectedProgramType),
+    [selectedProgramType],
+  );
 
   // Check if user is admin
   const checkIsAdmin = (email) => {
@@ -99,6 +108,7 @@ export default function LaporanPage() {
       } catch (err) {
         setError(err.message);
       } finally {
+        setUserLoaded(true); // PENTING: Set setelah user info ter-load
         setLoading(false);
       }
     }
@@ -107,9 +117,11 @@ export default function LaporanPage() {
   }, [router]);
 
   // Fetch data when filters change
+  // KEAMANAN: Enforce filter puskesmas berdasarkan role user
   useEffect(() => {
     async function fetchData() {
-      if (!selectedPeriod || !selectedProgramType) return;
+      // PENTING: Tunggu sampai user info ter-load
+      if (!selectedPeriod || !selectedProgramType || !userLoaded) return;
 
       // Validasi program type
       if (!isValidProgramType(selectedProgramType)) {
@@ -124,7 +136,7 @@ export default function LaporanPage() {
           .from("achievements")
           .select("*")
           .neq("puskesmas_code", "KAB");
-        
+
         // Jika BUKAN SEMUA_PROGRAM, filter by program type
         if (selectedProgramType !== PROGRAM_TYPES.SEMUA_PROGRAM) {
           query = query.eq("program_type", selectedProgramType);
@@ -139,7 +151,15 @@ export default function LaporanPage() {
           query = query.eq("period", selectedPeriod);
         }
 
-        if (selectedPuskesmas && selectedPuskesmas !== "all") {
+        // KEAMANAN: Non-admin WAJIB filter ke puskesmas sendiri
+        // Ini mencegah manipulasi dari client-side
+        if (!isAdmin && currentUser) {
+          const userPuskesmasCode = currentUser.email
+            .split("@")[0]
+            .toUpperCase();
+          query = query.eq("puskesmas_code", userPuskesmasCode);
+        } else if (selectedPuskesmas && selectedPuskesmas !== "all") {
+          // Admin bisa memilih puskesmas tertentu
           query = query.eq("puskesmas_code", selectedPuskesmas);
         }
 
@@ -157,7 +177,14 @@ export default function LaporanPage() {
     }
 
     fetchData();
-  }, [selectedPuskesmas, selectedPeriod, selectedProgramType]); // Tambahkan dependency
+  }, [
+    selectedPuskesmas,
+    selectedPeriod,
+    selectedProgramType,
+    isAdmin,
+    currentUser,
+    userLoaded,
+  ]); // Tambahkan dependency
 
   // Is showing all puskesmas (recap view)?
   const isRecapView = selectedPuskesmas === "all";
@@ -183,8 +210,9 @@ export default function LaporanPage() {
     });
 
     // Sort by program-specific INDICATOR_ORDER (dinamis)
-    return programIndicators.order.filter((name) => indicatorData[name]).map(
-      (name, idx) => {
+    return programIndicators.order
+      .filter((name) => indicatorData[name])
+      .map((name, idx) => {
         const d = indicatorData[name];
         const metrics = calculateMetrics(d.target, d.realization);
         return {
@@ -197,8 +225,7 @@ export default function LaporanPage() {
           unserved: metrics.unserved,
           status: metrics.isTuntas ? "TUNTAS" : "BELUM TUNTAS",
         };
-      },
-    );
+      });
   }, [data, isRecapView, programIndicators]);
 
   // Prepare RECAP report data (all puskesmas)
@@ -222,16 +249,22 @@ export default function LaporanPage() {
             HIPERTENSI: { target: 0, realization: 0 },
             DIABETES: { target: 0, realization: 0 },
             ODGJ: { target: 0, realization: 0 },
-          }
+          },
         };
       }
       pkmTotals[row.puskesmas_code].totalTarget += row.target_qty || 0;
-      pkmTotals[row.puskesmas_code].totalRealization += row.realization_qty || 0;
-      
+      pkmTotals[row.puskesmas_code].totalRealization +=
+        row.realization_qty || 0;
+
       // Track by program untuk SEMUA_PROGRAM view
-      if (row.program_type && pkmTotals[row.puskesmas_code].byProgram[row.program_type]) {
-        pkmTotals[row.puskesmas_code].byProgram[row.program_type].target += row.target_qty || 0;
-        pkmTotals[row.puskesmas_code].byProgram[row.program_type].realization += row.realization_qty || 0;
+      if (
+        row.program_type &&
+        pkmTotals[row.puskesmas_code].byProgram[row.program_type]
+      ) {
+        pkmTotals[row.puskesmas_code].byProgram[row.program_type].target +=
+          row.target_qty || 0;
+        pkmTotals[row.puskesmas_code].byProgram[row.program_type].realization +=
+          row.realization_qty || 0;
       }
     });
 
@@ -241,12 +274,15 @@ export default function LaporanPage() {
         const metrics = calculateMetrics(pkm.totalTarget, pkm.totalRealization);
         // Calculate per program percentages
         const programMetrics = {};
-        Object.keys(pkm.byProgram).forEach(prog => {
-          const pm = calculateMetrics(pkm.byProgram[prog].target, pkm.byProgram[prog].realization);
+        Object.keys(pkm.byProgram).forEach((prog) => {
+          const pm = calculateMetrics(
+            pkm.byProgram[prog].target,
+            pkm.byProgram[prog].realization,
+          );
           programMetrics[prog] = {
             ...pkm.byProgram[prog],
             percentage: pm.percentage,
-            status: pm.isTuntas ? "TUNTAS" : "BELUM"
+            status: pm.isTuntas ? "TUNTAS" : "BELUM",
           };
         });
         return {
@@ -302,12 +338,12 @@ export default function LaporanPage() {
   const calculateCategoryData = (specificProgramType = null) => {
     const targetProgramType = specificProgramType || selectedProgramType;
     const targetProgramConfig = getProgram(targetProgramType);
-    
+
     // Filter data berdasarkan program type jika spesifik
-    const filteredData = specificProgramType 
-      ? data.filter(row => row.program_type === specificProgramType)
+    const filteredData = specificProgramType
+      ? data.filter((row) => row.program_type === specificProgramType)
       : data;
-    
+
     const indicatorData = {};
     filteredData.forEach((row) => {
       if (!indicatorData[row.indicator_name]) {
@@ -330,18 +366,21 @@ export default function LaporanPage() {
     const partBSDM = targetProgramConfig.indicators?.partBSDM || [];
 
     // Hitung total Part A
-    let partATarget = 0, partAReal = 0;
-    partA.forEach(name => {
+    let partATarget = 0,
+      partAReal = 0;
+    partA.forEach((name) => {
       if (indicatorData[name]) {
         partATarget += indicatorData[name].target;
         partAReal += indicatorData[name].realization;
       }
     });
-    const partAPercent = partATarget > 0 ? ((partAReal / partATarget) * 100).toFixed(2) : "0.00";
+    const partAPercent =
+      partATarget > 0 ? ((partAReal / partATarget) * 100).toFixed(2) : "0.00";
 
     // Hitung total Part B Barang
-    let partBBarangTarget = 0, partBBarangReal = 0;
-    partBBarang.forEach(name => {
+    let partBBarangTarget = 0,
+      partBBarangReal = 0;
+    partBBarang.forEach((name) => {
       if (indicatorData[name]) {
         partBBarangTarget += indicatorData[name].target;
         partBBarangReal += indicatorData[name].realization;
@@ -349,8 +388,9 @@ export default function LaporanPage() {
     });
 
     // Hitung total Part B SDM
-    let partBSDMTarget = 0, partBSDMReal = 0;
-    partBSDM.forEach(name => {
+    let partBSDMTarget = 0,
+      partBSDMReal = 0;
+    partBSDM.forEach((name) => {
       if (indicatorData[name]) {
         partBSDMTarget += indicatorData[name].target;
         partBSDMReal += indicatorData[name].realization;
@@ -360,14 +400,23 @@ export default function LaporanPage() {
     // Total Part B
     const partBTarget = partBBarangTarget + partBSDMTarget;
     const partBReal = partBBarangReal + partBSDMReal;
-    const partBPercent = partBTarget > 0 ? ((partBReal / partBTarget) * 100).toFixed(2) : "0.00";
+    const partBPercent =
+      partBTarget > 0 ? ((partBReal / partBTarget) * 100).toFixed(2) : "0.00";
 
     return {
       indicatorData,
-      partA: { target: partATarget, realization: partAReal, percentage: partAPercent },
+      partA: {
+        target: partATarget,
+        realization: partAReal,
+        percentage: partAPercent,
+      },
       partBBarang: { target: partBBarangTarget, realization: partBBarangReal },
       partBSDM: { target: partBSDMTarget, realization: partBSDMReal },
-      partB: { target: partBTarget, realization: partBReal, percentage: partBPercent },
+      partB: {
+        target: partBTarget,
+        realization: partBReal,
+        percentage: partBPercent,
+      },
     };
   };
 
@@ -381,53 +430,74 @@ export default function LaporanPage() {
     try {
       const XLSX = await import("xlsx");
       const isSemua = selectedProgramType === PROGRAM_TYPES.SEMUA_PROGRAM;
-      
+
       // List 4 program untuk SEMUA_PROGRAM
-      const PROGRAM_LIST = ['USIA_PRODUKTIF', 'HIPERTENSI', 'DIABETES', 'ODGJ'];
+      const PROGRAM_LIST = ["USIA_PRODUKTIF", "HIPERTENSI", "DIABETES", "ODGJ"];
 
       // ============================================
       // BUILD EXCEL ROWS SESUAI FORMAT SPM KEMENDAGRI
       // ============================================
       const rows = [];
-      
+
       // KOP SURAT
       rows.push(["PEMERINTAH KABUPATEN MOROWALI UTARA"]);
       rows.push(["DINAS KESEHATAN DAERAH"]);
       rows.push(["CAPAIAN STANDAR PELAYANAN MINIMAL (SPM) BIDANG KESEHATAN"]);
       rows.push([`PERIODE: ${getPeriodLabel()}`]);
       rows.push([""]);
-      
+
       if (isRecapView) {
         // ============================================
         // MODE REKAP - Rekapitulasi Seluruh Puskesmas
         // ============================================
-        
+
         if (isSemua) {
           // ============================================
           // FORMAT SEMUA PROGRAM - 4 SECTION TERPISAH
           // ============================================
-          rows.push(["REKAPITULASI CAPAIAN SPM BIDANG KESEHATAN - SELURUH PUSKESMAS"]);
+          rows.push([
+            "REKAPITULASI CAPAIAN SPM BIDANG KESEHATAN - SELURUH PUSKESMAS",
+          ]);
           rows.push([""]);
-          
+
           // Loop untuk setiap program (4 section terpisah)
           PROGRAM_LIST.forEach((progType, progIdx) => {
             const prog = getProgram(progType);
-            
-            rows.push(["═══════════════════════════════════════════════════════════════════════════════════════"]);
-            rows.push([`SECTION ${progIdx + 1}: ${prog.description?.toUpperCase() || prog.label.toUpperCase()}`]);
-            rows.push(["═══════════════════════════════════════════════════════════════════════════════════════"]);
+
+            rows.push([
+              "═══════════════════════════════════════════════════════════════════════════════════════",
+            ]);
+            rows.push([
+              `SECTION ${progIdx + 1}: ${prog.description?.toUpperCase() || prog.label.toUpperCase()}`,
+            ]);
+            rows.push([
+              "═══════════════════════════════════════════════════════════════════════════════════════",
+            ]);
             rows.push([""]);
-            
+
             // Header Table per program
-            rows.push(["No", "Nama Puskesmas", "Kode", "Sasaran", "Realisasi", "% Capaian", "Status"]);
-            
+            rows.push([
+              "No",
+              "Nama Puskesmas",
+              "Kode",
+              "Sasaran",
+              "Realisasi",
+              "% Capaian",
+              "Status",
+            ]);
+
             // Data per Puskesmas untuk program ini
             let progTotal = { target: 0, realization: 0 };
             recapReportData.forEach((row) => {
-              const progData = row.byProgram?.[progType] || { target: 0, realization: 0, percentage: "0.00", status: "BELUM" };
+              const progData = row.byProgram?.[progType] || {
+                target: 0,
+                realization: 0,
+                percentage: "0.00",
+                status: "BELUM",
+              };
               progTotal.target += progData.target || 0;
               progTotal.realization += progData.realization || 0;
-              
+
               rows.push([
                 row.no,
                 row.name,
@@ -435,12 +505,15 @@ export default function LaporanPage() {
                 progData.target || 0,
                 progData.realization || 0,
                 `${progData.percentage || "0.00"}%`,
-                progData.status === "TUNTAS" ? "TUNTAS" : "BELUM TUNTAS"
+                progData.status === "TUNTAS" ? "TUNTAS" : "BELUM TUNTAS",
               ]);
             });
-            
+
             // Subtotal per program
-            const progPercent = progTotal.target > 0 ? ((progTotal.realization / progTotal.target) * 100).toFixed(2) : "0.00";
+            const progPercent =
+              progTotal.target > 0
+                ? ((progTotal.realization / progTotal.target) * 100).toFixed(2)
+                : "0.00";
             rows.push([""]);
             rows.push([
               "",
@@ -449,22 +522,31 @@ export default function LaporanPage() {
               progTotal.target,
               progTotal.realization,
               `${progPercent}%`,
-              parseFloat(progPercent) >= 80 ? "TUNTAS" : "BELUM TUNTAS"
+              parseFloat(progPercent) >= 80 ? "TUNTAS" : "BELUM TUNTAS",
             ]);
             rows.push([""]);
             rows.push([""]);
           });
-          
         } else {
           // ============================================
           // FORMAT PROGRAM TUNGGAL - Tabel standar
           // ============================================
-          rows.push([`REKAPITULASI ${programConfig.label.toUpperCase()} - SELURUH PUSKESMAS`]);
+          rows.push([
+            `REKAPITULASI ${programConfig.label.toUpperCase()} - SELURUH PUSKESMAS`,
+          ]);
           rows.push([""]);
-          
+
           // Header Table Rekap
-          rows.push(["No", "Nama Puskesmas", "Kode", "Sasaran", "Realisasi", "% Capaian", "Status"]);
-          
+          rows.push([
+            "No",
+            "Nama Puskesmas",
+            "Kode",
+            "Sasaran",
+            "Realisasi",
+            "% Capaian",
+            "Status",
+          ]);
+
           // Data per Puskesmas
           recapReportData.forEach((row) => {
             rows.push([
@@ -474,10 +556,10 @@ export default function LaporanPage() {
               row.totalTarget,
               row.totalRealization,
               `${row.percentage}%`,
-              row.status
+              row.status,
             ]);
           });
-          
+
           // Grand Total
           rows.push([""]);
           rows.push([
@@ -487,198 +569,418 @@ export default function LaporanPage() {
             grandTotal?.target || 0,
             grandTotal?.realization || 0,
             `${grandTotal?.percentage || "0.00"}%`,
-            grandTotal?.status || "BELUM TUNTAS"
+            grandTotal?.status || "BELUM TUNTAS",
           ]);
         }
-        
       } else {
         // ============================================
         // MODE DETAIL - Per Puskesmas
         // ============================================
         const pkmName = getSelectedPuskesmasName();
-        
+
         if (isSemua) {
           // ============================================
           // SEMUA_PROGRAM: 4 SECTION TERPISAH per penyakit
           // ============================================
-          rows.push([`LAPORAN DETAIL CAPAIAN SPM - PUSKESMAS ${pkmName.toUpperCase()}`]);
+          rows.push([
+            `LAPORAN DETAIL CAPAIAN SPM - PUSKESMAS ${pkmName.toUpperCase()}`,
+          ]);
           rows.push([""]);
-          
+
           // Loop untuk setiap program (4 section terpisah)
           PROGRAM_LIST.forEach((progType, progIdx) => {
             const prog = getProgram(progType);
             const catData = calculateCategoryData(progType);
-            
-            rows.push(["═══════════════════════════════════════════════════════════════════════════════════════"]);
-            rows.push([`SECTION ${progIdx + 1}: ${prog.description?.toUpperCase() || prog.label.toUpperCase()}`]);
-            rows.push(["═══════════════════════════════════════════════════════════════════════════════════════"]);
+
+            rows.push([
+              "═══════════════════════════════════════════════════════════════════════════════════════",
+            ]);
+            rows.push([
+              `SECTION ${progIdx + 1}: ${prog.description?.toUpperCase() || prog.label.toUpperCase()}`,
+            ]);
+            rows.push([
+              "═══════════════════════════════════════════════════════════════════════════════════════",
+            ]);
             rows.push([""]);
-            
+
             // SECTION A - LAYANAN DASAR (80%)
             rows.push(["PERSENTASE PENCAPAIAN PENERIMAAN LAYANAN DASAR (80%)"]);
             rows.push([""]);
             rows.push(["A. JUMLAH YANG HARUS DILAYANI"]);
-            rows.push(["No", "Indikator", "Satuan", "Sasaran", "Realisasi", "% Capaian", "Status"]);
-            
+            rows.push([
+              "No",
+              "Indikator",
+              "Satuan",
+              "Sasaran",
+              "Realisasi",
+              "% Capaian",
+              "Status",
+            ]);
+
             const partAIndicators = prog.indicators?.partA || [];
             let noA = 1;
-            partAIndicators.forEach(indicatorName => {
+            partAIndicators.forEach((indicatorName) => {
               const d = catData.indicatorData[indicatorName];
               if (d) {
-                const pct = d.target > 0 ? ((d.realization / d.target) * 100).toFixed(2) : "0.00";
-                const status = parseFloat(pct) >= 80 ? "TUNTAS" : "BELUM TUNTAS";
-                rows.push([noA++, indicatorName, d.unit, d.target, d.realization, `${pct}%`, status]);
+                const pct =
+                  d.target > 0
+                    ? ((d.realization / d.target) * 100).toFixed(2)
+                    : "0.00";
+                const status =
+                  parseFloat(pct) >= 80 ? "TUNTAS" : "BELUM TUNTAS";
+                rows.push([
+                  noA++,
+                  indicatorName,
+                  d.unit,
+                  d.target,
+                  d.realization,
+                  `${pct}%`,
+                  status,
+                ]);
               }
             });
-            
+
             rows.push([""]);
-            rows.push(["", "SUBTOTAL LAYANAN DASAR (A)", "", catData.partA.target, catData.partA.realization, `${catData.partA.percentage}%`, parseFloat(catData.partA.percentage) >= 80 ? "TUNTAS" : "BELUM TUNTAS"]);
+            rows.push([
+              "",
+              "SUBTOTAL LAYANAN DASAR (A)",
+              "",
+              catData.partA.target,
+              catData.partA.realization,
+              `${catData.partA.percentage}%`,
+              parseFloat(catData.partA.percentage) >= 80
+                ? "TUNTAS"
+                : "BELUM TUNTAS",
+            ]);
             rows.push([""]);
-            
+
             // SECTION B - MUTU MINIMAL (20%)
-            rows.push(["PERSENTASE PENCAPAIAN MUTU MINIMAL LAYANAN DASAR (20%)"]);
+            rows.push([
+              "PERSENTASE PENCAPAIAN MUTU MINIMAL LAYANAN DASAR (20%)",
+            ]);
             rows.push([""]);
-            
+
             // B.1 BARANG/JASA
             rows.push(["B.1 BARANG / JASA"]);
-            rows.push(["No", "Indikator", "Satuan", "Target", "Realisasi", "% Capaian", "Status"]);
-            
+            rows.push([
+              "No",
+              "Indikator",
+              "Satuan",
+              "Target",
+              "Realisasi",
+              "% Capaian",
+              "Status",
+            ]);
+
             const partBBarangIndicators = prog.indicators?.partBBarang || [];
             let noB1 = 1;
-            partBBarangIndicators.forEach(indicatorName => {
+            partBBarangIndicators.forEach((indicatorName) => {
               const d = catData.indicatorData[indicatorName];
               if (d) {
-                const pct = d.target > 0 ? ((d.realization / d.target) * 100).toFixed(2) : "0.00";
-                rows.push([noB1++, indicatorName, d.unit, d.target, d.realization, `${pct}%`, parseFloat(pct) >= 80 ? "✓" : "✗"]);
+                const pct =
+                  d.target > 0
+                    ? ((d.realization / d.target) * 100).toFixed(2)
+                    : "0.00";
+                rows.push([
+                  noB1++,
+                  indicatorName,
+                  d.unit,
+                  d.target,
+                  d.realization,
+                  `${pct}%`,
+                  parseFloat(pct) >= 80 ? "✓" : "✗",
+                ]);
               }
             });
             rows.push([""]);
-            
+
             // B.2 SDM
             rows.push(["B.2 SUMBER DAYA MANUSIA (SDM)"]);
-            rows.push(["No", "Indikator", "Satuan", "Target", "Realisasi", "% Capaian", "Status"]);
-            
+            rows.push([
+              "No",
+              "Indikator",
+              "Satuan",
+              "Target",
+              "Realisasi",
+              "% Capaian",
+              "Status",
+            ]);
+
             const partBSDMIndicators = prog.indicators?.partBSDM || [];
             let noB2 = 1;
-            partBSDMIndicators.forEach(indicatorName => {
+            partBSDMIndicators.forEach((indicatorName) => {
               const d = catData.indicatorData[indicatorName];
               if (d) {
-                const pct = d.target > 0 ? ((d.realization / d.target) * 100).toFixed(2) : "0.00";
-                rows.push([noB2++, indicatorName, d.unit, d.target, d.realization, `${pct}%`, parseFloat(pct) >= 80 ? "✓" : "✗"]);
+                const pct =
+                  d.target > 0
+                    ? ((d.realization / d.target) * 100).toFixed(2)
+                    : "0.00";
+                rows.push([
+                  noB2++,
+                  indicatorName,
+                  d.unit,
+                  d.target,
+                  d.realization,
+                  `${pct}%`,
+                  parseFloat(pct) >= 80 ? "✓" : "✗",
+                ]);
               }
             });
-            
+
             rows.push([""]);
-            rows.push(["", "SUBTOTAL MUTU MINIMAL (B)", "", catData.partB.target, catData.partB.realization, `${catData.partB.percentage}%`, parseFloat(catData.partB.percentage) >= 80 ? "TUNTAS" : "BELUM TUNTAS"]);
+            rows.push([
+              "",
+              "SUBTOTAL MUTU MINIMAL (B)",
+              "",
+              catData.partB.target,
+              catData.partB.realization,
+              `${catData.partB.percentage}%`,
+              parseFloat(catData.partB.percentage) >= 80
+                ? "TUNTAS"
+                : "BELUM TUNTAS",
+            ]);
             rows.push([""]);
-            
+
             // SUMMARY per program
-            const nilaiA = (parseFloat(catData.partA.percentage) * 0.8).toFixed(2);
-            const nilaiB = (parseFloat(catData.partB.percentage) * 0.2).toFixed(2);
-            const totalNilai = (parseFloat(nilaiA) + parseFloat(nilaiB)).toFixed(2);
-            
+            const nilaiA = (parseFloat(catData.partA.percentage) * 0.8).toFixed(
+              2,
+            );
+            const nilaiB = (parseFloat(catData.partB.percentage) * 0.2).toFixed(
+              2,
+            );
+            const totalNilai = (
+              parseFloat(nilaiA) + parseFloat(nilaiB)
+            ).toFixed(2);
+
             rows.push(["REKAPITULASI NILAI AKHIR"]);
             rows.push(["Komponen", "Bobot", "Capaian (%)", "Nilai Tertimbang"]);
-            rows.push(["A. Layanan Dasar", "80%", `${catData.partA.percentage}%`, nilaiA]);
-            rows.push(["B. Mutu Minimal", "20%", `${catData.partB.percentage}%`, nilaiB]);
+            rows.push([
+              "A. Layanan Dasar",
+              "80%",
+              `${catData.partA.percentage}%`,
+              nilaiA,
+            ]);
+            rows.push([
+              "B. Mutu Minimal",
+              "20%",
+              `${catData.partB.percentage}%`,
+              nilaiB,
+            ]);
             rows.push(["TOTAL NILAI SPM", "100%", "", totalNilai]);
-            rows.push(["STATUS", "", "", parseFloat(totalNilai) >= 80 ? "TUNTAS" : "BELUM TUNTAS"]);
+            rows.push([
+              "STATUS",
+              "",
+              "",
+              parseFloat(totalNilai) >= 80 ? "TUNTAS" : "BELUM TUNTAS",
+            ]);
             rows.push([""]);
             rows.push([""]);
           });
-          
         } else {
           // ============================================
           // PROGRAM TUNGGAL: Format Section A & B standar
           // ============================================
           const catData = calculateCategoryData();
-          
-          rows.push([`JENIS PELAYANAN DASAR: ${programConfig.description?.toUpperCase() || programConfig.label.toUpperCase()}`]);
+
+          rows.push([
+            `JENIS PELAYANAN DASAR: ${programConfig.description?.toUpperCase() || programConfig.label.toUpperCase()}`,
+          ]);
           rows.push([`PUSKESMAS: ${pkmName.toUpperCase()}`]);
           rows.push([""]);
-          
+
           // SECTION A
-          rows.push(["═══════════════════════════════════════════════════════════════════════════════════════"]);
+          rows.push([
+            "═══════════════════════════════════════════════════════════════════════════════════════",
+          ]);
           rows.push(["PERSENTASE PENCAPAIAN PENERIMAAN LAYANAN DASAR (80%)"]);
-          rows.push(["═══════════════════════════════════════════════════════════════════════════════════════"]);
+          rows.push([
+            "═══════════════════════════════════════════════════════════════════════════════════════",
+          ]);
           rows.push([""]);
           rows.push(["A. JUMLAH YANG HARUS DILAYANI"]);
-          rows.push(["No", "Indikator", "Satuan", "Sasaran", "Realisasi", "% Capaian", "Status"]);
-          
+          rows.push([
+            "No",
+            "Indikator",
+            "Satuan",
+            "Sasaran",
+            "Realisasi",
+            "% Capaian",
+            "Status",
+          ]);
+
           const partAIndicators = programConfig.indicators?.partA || [];
           let noA = 1;
-          partAIndicators.forEach(indicatorName => {
+          partAIndicators.forEach((indicatorName) => {
             const d = catData.indicatorData[indicatorName];
             if (d) {
-              const pct = d.target > 0 ? ((d.realization / d.target) * 100).toFixed(2) : "0.00";
-              rows.push([noA++, indicatorName, d.unit, d.target, d.realization, `${pct}%`, parseFloat(pct) >= 80 ? "TUNTAS" : "BELUM TUNTAS"]);
+              const pct =
+                d.target > 0
+                  ? ((d.realization / d.target) * 100).toFixed(2)
+                  : "0.00";
+              rows.push([
+                noA++,
+                indicatorName,
+                d.unit,
+                d.target,
+                d.realization,
+                `${pct}%`,
+                parseFloat(pct) >= 80 ? "TUNTAS" : "BELUM TUNTAS",
+              ]);
             }
           });
-          
+
           rows.push([""]);
-          rows.push(["", "TOTAL LAYANAN DASAR (A)", "", catData.partA.target, catData.partA.realization, `${catData.partA.percentage}%`, parseFloat(catData.partA.percentage) >= 80 ? "TUNTAS" : "BELUM TUNTAS"]);
+          rows.push([
+            "",
+            "TOTAL LAYANAN DASAR (A)",
+            "",
+            catData.partA.target,
+            catData.partA.realization,
+            `${catData.partA.percentage}%`,
+            parseFloat(catData.partA.percentage) >= 80
+              ? "TUNTAS"
+              : "BELUM TUNTAS",
+          ]);
           rows.push([""]);
-          
+
           // SECTION B
-          rows.push(["═══════════════════════════════════════════════════════════════════════════════════════"]);
+          rows.push([
+            "═══════════════════════════════════════════════════════════════════════════════════════",
+          ]);
           rows.push(["PERSENTASE PENCAPAIAN MUTU MINIMAL LAYANAN DASAR (20%)"]);
-          rows.push(["═══════════════════════════════════════════════════════════════════════════════════════"]);
+          rows.push([
+            "═══════════════════════════════════════════════════════════════════════════════════════",
+          ]);
           rows.push([""]);
           rows.push(["B. JUMLAH BARANG / JASA / SDM YANG HARUS DISIAPKAN"]);
           rows.push([""]);
-          
+
           // B.1 BARANG/JASA
           rows.push(["B.1 BARANG / JASA"]);
-          rows.push(["No", "Indikator Barang/Jasa", "Satuan", "Target", "Realisasi", "% Capaian", "Status"]);
-          
-          const partBBarangIndicators = programConfig.indicators?.partBBarang || [];
+          rows.push([
+            "No",
+            "Indikator Barang/Jasa",
+            "Satuan",
+            "Target",
+            "Realisasi",
+            "% Capaian",
+            "Status",
+          ]);
+
+          const partBBarangIndicators =
+            programConfig.indicators?.partBBarang || [];
           let noB1 = 1;
-          partBBarangIndicators.forEach(indicatorName => {
+          partBBarangIndicators.forEach((indicatorName) => {
             const d = catData.indicatorData[indicatorName];
             if (d) {
-              const pct = d.target > 0 ? ((d.realization / d.target) * 100).toFixed(2) : "0.00";
-              rows.push([noB1++, indicatorName, d.unit, d.target, d.realization, `${pct}%`, parseFloat(pct) >= 80 ? "✓" : "✗"]);
+              const pct =
+                d.target > 0
+                  ? ((d.realization / d.target) * 100).toFixed(2)
+                  : "0.00";
+              rows.push([
+                noB1++,
+                indicatorName,
+                d.unit,
+                d.target,
+                d.realization,
+                `${pct}%`,
+                parseFloat(pct) >= 80 ? "✓" : "✗",
+              ]);
             }
           });
           rows.push([""]);
-          
+
           // B.2 SDM
           rows.push(["B.2 SUMBER DAYA MANUSIA (SDM)"]);
-          rows.push(["No", "Indikator SDM", "Satuan", "Target", "Realisasi", "% Capaian", "Status"]);
-          
+          rows.push([
+            "No",
+            "Indikator SDM",
+            "Satuan",
+            "Target",
+            "Realisasi",
+            "% Capaian",
+            "Status",
+          ]);
+
           const partBSDMIndicators = programConfig.indicators?.partBSDM || [];
           let noB2 = 1;
-          partBSDMIndicators.forEach(indicatorName => {
+          partBSDMIndicators.forEach((indicatorName) => {
             const d = catData.indicatorData[indicatorName];
             if (d) {
-              const pct = d.target > 0 ? ((d.realization / d.target) * 100).toFixed(2) : "0.00";
-              rows.push([noB2++, indicatorName, d.unit, d.target, d.realization, `${pct}%`, parseFloat(pct) >= 80 ? "✓" : "✗"]);
+              const pct =
+                d.target > 0
+                  ? ((d.realization / d.target) * 100).toFixed(2)
+                  : "0.00";
+              rows.push([
+                noB2++,
+                indicatorName,
+                d.unit,
+                d.target,
+                d.realization,
+                `${pct}%`,
+                parseFloat(pct) >= 80 ? "✓" : "✗",
+              ]);
             }
           });
-          
+
           rows.push([""]);
-          rows.push(["", "TOTAL MUTU MINIMAL (B)", "", catData.partB.target, catData.partB.realization, `${catData.partB.percentage}%`, parseFloat(catData.partB.percentage) >= 80 ? "TUNTAS" : "BELUM TUNTAS"]);
+          rows.push([
+            "",
+            "TOTAL MUTU MINIMAL (B)",
+            "",
+            catData.partB.target,
+            catData.partB.realization,
+            `${catData.partB.percentage}%`,
+            parseFloat(catData.partB.percentage) >= 80
+              ? "TUNTAS"
+              : "BELUM TUNTAS",
+          ]);
           rows.push([""]);
-          
+
           // GRAND SUMMARY
-          rows.push(["═══════════════════════════════════════════════════════════════════════════════════════"]);
+          rows.push([
+            "═══════════════════════════════════════════════════════════════════════════════════════",
+          ]);
           rows.push(["REKAPITULASI CAPAIAN SPM"]);
-          rows.push(["═══════════════════════════════════════════════════════════════════════════════════════"]);
+          rows.push([
+            "═══════════════════════════════════════════════════════════════════════════════════════",
+          ]);
           rows.push([""]);
           rows.push(["Komponen", "Bobot", "Capaian (%)", "Nilai Tertimbang"]);
-          
-          const nilaiA = (parseFloat(catData.partA.percentage) * 0.8).toFixed(2);
-          const nilaiB = (parseFloat(catData.partB.percentage) * 0.2).toFixed(2);
-          const totalNilai = (parseFloat(nilaiA) + parseFloat(nilaiB)).toFixed(2);
-          
-          rows.push(["A. Layanan Dasar", "80%", `${catData.partA.percentage}%`, nilaiA]);
-          rows.push(["B. Mutu Minimal", "20%", `${catData.partB.percentage}%`, nilaiB]);
+
+          const nilaiA = (parseFloat(catData.partA.percentage) * 0.8).toFixed(
+            2,
+          );
+          const nilaiB = (parseFloat(catData.partB.percentage) * 0.2).toFixed(
+            2,
+          );
+          const totalNilai = (parseFloat(nilaiA) + parseFloat(nilaiB)).toFixed(
+            2,
+          );
+
+          rows.push([
+            "A. Layanan Dasar",
+            "80%",
+            `${catData.partA.percentage}%`,
+            nilaiA,
+          ]);
+          rows.push([
+            "B. Mutu Minimal",
+            "20%",
+            `${catData.partB.percentage}%`,
+            nilaiB,
+          ]);
           rows.push([""]);
           rows.push(["TOTAL NILAI AKHIR SPM", "100%", "", totalNilai]);
-          rows.push(["STATUS", "", "", parseFloat(totalNilai) >= 80 ? "TUNTAS" : "BELUM TUNTAS"]);
+          rows.push([
+            "STATUS",
+            "",
+            "",
+            parseFloat(totalNilai) >= 80 ? "TUNTAS" : "BELUM TUNTAS",
+          ]);
         }
       }
-      
+
       // FOOTER
       rows.push([""]);
       rows.push([""]);
@@ -687,20 +989,22 @@ export default function LaporanPage() {
       rows.push(["- Target Capaian: 100%"]);
       rows.push(["- Bobot Layanan Dasar: 80%, Bobot Mutu Minimal: 20%"]);
       rows.push([""]);
-      rows.push([`Dicetak pada: ${new Date().toLocaleString("id-ID", { dateStyle: "full", timeStyle: "short" })}`]);
+      rows.push([
+        `Dicetak pada: ${new Date().toLocaleString("id-ID", { dateStyle: "full", timeStyle: "short" })}`,
+      ]);
 
       // CREATE WORKSHEET
       const ws = XLSX.utils.aoa_to_sheet(rows);
 
       // Set column widths
       ws["!cols"] = [
-        { wch: 5 },   // No
-        { wch: 60 },  // Indikator/Nama
-        { wch: 12 },  // Satuan/Kode
-        { wch: 14 },  // Target/Sasaran
-        { wch: 14 },  // Realisasi
-        { wch: 14 },  // % Capaian
-        { wch: 15 },  // Status
+        { wch: 5 }, // No
+        { wch: 60 }, // Indikator/Nama
+        { wch: 12 }, // Satuan/Kode
+        { wch: 14 }, // Target/Sasaran
+        { wch: 14 }, // Realisasi
+        { wch: 14 }, // % Capaian
+        { wch: 15 }, // Status
       ];
 
       const wb = XLSX.utils.book_new();
@@ -735,14 +1039,14 @@ export default function LaporanPage() {
       const { jsPDF } = await import("jspdf");
       const autoTable = (await import("jspdf-autotable")).default;
       const isSemua = selectedProgramType === PROGRAM_TYPES.SEMUA_PROGRAM;
-      
+
       // List 4 program untuk SEMUA_PROGRAM
-      const PROGRAM_LIST = ['USIA_PRODUKTIF', 'HIPERTENSI', 'DIABETES', 'ODGJ'];
+      const PROGRAM_LIST = ["USIA_PRODUKTIF", "HIPERTENSI", "DIABETES", "ODGJ"];
       const PROGRAM_COLORS = {
-        USIA_PRODUKTIF: [2, 132, 199],   // sky-600
-        HIPERTENSI: [225, 29, 72],       // rose-600
-        DIABETES: [5, 150, 105],         // emerald-600
-        ODGJ: [124, 58, 237],            // violet-600
+        USIA_PRODUKTIF: [2, 132, 199], // sky-600
+        HIPERTENSI: [225, 29, 72], // rose-600
+        DIABETES: [5, 150, 105], // emerald-600
+        ODGJ: [124, 58, 237], // violet-600
       };
 
       const doc = new jsPDF(isRecapView ? "landscape" : "portrait", "mm", "a4");
@@ -760,7 +1064,9 @@ export default function LaporanPage() {
         });
 
         doc.setFontSize(16);
-        doc.text("DINAS KESEHATAN DAERAH", pageWidth / 2, 22, { align: "center" });
+        doc.text("DINAS KESEHATAN DAERAH", pageWidth / 2, 22, {
+          align: "center",
+        });
 
         doc.setFontSize(9);
         doc.setFont("helvetica", "normal");
@@ -797,9 +1103,11 @@ export default function LaporanPage() {
         47,
         { align: "center" },
       );
-      
+
       if (isSemua) {
-        doc.text("REKAPITULASI SELURUH JENIS SPM", pageWidth / 2, 53, { align: "center" });
+        doc.text("REKAPITULASI SELURUH JENIS SPM", pageWidth / 2, 53, {
+          align: "center",
+        });
       } else {
         doc.text(
           `${programConfig.description?.toUpperCase() || programConfig.label.toUpperCase()}`,
@@ -812,7 +1120,9 @@ export default function LaporanPage() {
       // Periode Info
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
-      doc.text(`Periode: ${getPeriodLabel()}`, pageWidth / 2, 60, { align: "center" });
+      doc.text(`Periode: ${getPeriodLabel()}`, pageWidth / 2, 60, {
+        align: "center",
+      });
 
       let currentY = 68;
 
@@ -820,7 +1130,7 @@ export default function LaporanPage() {
         // ============================================
         // MODE REKAP - TABEL REKAPITULASI KABUPATEN
         // ============================================
-        
+
         if (isSemua) {
           // ============================================
           // SEMUA_PROGRAM: 4 SECTION TERPISAH per program
@@ -829,27 +1139,36 @@ export default function LaporanPage() {
             const progType = PROGRAM_LIST[progIdx];
             const prog = getProgram(progType);
             const progColor = PROGRAM_COLORS[progType];
-            
+
             // Add new page if needed (except first)
             if (progIdx > 0) {
               doc.addPage();
               addKopSurat();
               currentY = 48;
             }
-            
+
             // Section Header
             doc.setFillColor(...progColor);
             doc.rect(14, currentY, pageWidth - 28, 8, "F");
             doc.setTextColor(255, 255, 255);
             doc.setFontSize(11);
             doc.setFont("helvetica", "bold");
-            doc.text(`SECTION ${progIdx + 1}: ${prog.description?.toUpperCase() || prog.label.toUpperCase()}`, 16, currentY + 5.5);
+            doc.text(
+              `SECTION ${progIdx + 1}: ${prog.description?.toUpperCase() || prog.label.toUpperCase()}`,
+              16,
+              currentY + 5.5,
+            );
             doc.setTextColor(0, 0, 0);
             currentY += 12;
-            
+
             // Build table data for this program
             const tableData = recapReportData.map((row) => {
-              const progData = row.byProgram?.[progType] || { target: 0, realization: 0, percentage: "0.00", status: "BELUM" };
+              const progData = row.byProgram?.[progType] || {
+                target: 0,
+                realization: 0,
+                percentage: "0.00",
+                status: "BELUM",
+              };
               return [
                 row.no,
                 row.name,
@@ -857,36 +1176,65 @@ export default function LaporanPage() {
                 (progData.target || 0).toLocaleString("id-ID"),
                 (progData.realization || 0).toLocaleString("id-ID"),
                 `${progData.percentage || "0.00"}%`,
-                progData.status === "TUNTAS" ? "TUNTAS" : "BELUM TUNTAS"
+                progData.status === "TUNTAS" ? "TUNTAS" : "BELUM TUNTAS",
               ];
             });
-            
+
             // Calculate program total
-            let progTotalTarget = 0, progTotalReal = 0;
-            recapReportData.forEach(row => {
-              const progData = row.byProgram?.[progType] || { target: 0, realization: 0 };
+            let progTotalTarget = 0,
+              progTotalReal = 0;
+            recapReportData.forEach((row) => {
+              const progData = row.byProgram?.[progType] || {
+                target: 0,
+                realization: 0,
+              };
               progTotalTarget += progData.target || 0;
               progTotalReal += progData.realization || 0;
             });
-            const progPercent = progTotalTarget > 0 ? ((progTotalReal / progTotalTarget) * 100).toFixed(2) : "0.00";
-            
+            const progPercent =
+              progTotalTarget > 0
+                ? ((progTotalReal / progTotalTarget) * 100).toFixed(2)
+                : "0.00";
+
             autoTable(doc, {
               startY: currentY,
-              head: [["No", "Nama Puskesmas", "Kode", "Sasaran", "Realisasi", "% Capaian", "Status"]],
+              head: [
+                [
+                  "No",
+                  "Nama Puskesmas",
+                  "Kode",
+                  "Sasaran",
+                  "Realisasi",
+                  "% Capaian",
+                  "Status",
+                ],
+              ],
               body: tableData,
-              foot: [[
-                "",
-                `TOTAL ${prog.shortLabel.toUpperCase()}`,
-                "",
-                progTotalTarget.toLocaleString("id-ID"),
-                progTotalReal.toLocaleString("id-ID"),
-                `${progPercent}%`,
-                parseFloat(progPercent) >= 80 ? "TUNTAS" : "BELUM TUNTAS"
-              ]],
+              foot: [
+                [
+                  "",
+                  `TOTAL ${prog.shortLabel.toUpperCase()}`,
+                  "",
+                  progTotalTarget.toLocaleString("id-ID"),
+                  progTotalReal.toLocaleString("id-ID"),
+                  `${progPercent}%`,
+                  parseFloat(progPercent) >= 80 ? "TUNTAS" : "BELUM TUNTAS",
+                ],
+              ],
               theme: "grid",
-              headStyles: { fillColor: progColor, fontSize: 8, halign: "center", fontStyle: "bold" },
+              headStyles: {
+                fillColor: progColor,
+                fontSize: 8,
+                halign: "center",
+                fontStyle: "bold",
+              },
               bodyStyles: { fontSize: 7 },
-              footStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontSize: 8, fontStyle: "bold" },
+              footStyles: {
+                fillColor: [51, 65, 85],
+                textColor: [255, 255, 255],
+                fontSize: 8,
+                fontStyle: "bold",
+              },
               columnStyles: {
                 0: { halign: "center", cellWidth: 10 },
                 1: { cellWidth: 50 },
@@ -898,21 +1246,21 @@ export default function LaporanPage() {
               },
               didParseCell: function (data) {
                 if (data.column.index === 6 && data.section === "body") {
-                  data.cell.styles.textColor = data.cell.raw === "TUNTAS" ? [5, 150, 105] : [220, 38, 38];
+                  data.cell.styles.textColor =
+                    data.cell.raw === "TUNTAS" ? [5, 150, 105] : [220, 38, 38];
                   data.cell.styles.fontStyle = "bold";
                 }
               },
             });
-            
+
             currentY = doc.lastAutoTable.finalY + 10;
           }
-          
         } else {
           // ============================================
           // PROGRAM TUNGGAL - Format standar
           // ============================================
           const catData = calculateCategoryData();
-          
+
           doc.setFontSize(11);
           doc.setFont("helvetica", "bold");
           doc.text("REKAPITULASI SELURUH PUSKESMAS", 14, currentY);
@@ -930,21 +1278,45 @@ export default function LaporanPage() {
 
           autoTable(doc, {
             startY: currentY,
-            head: [["No", "Nama Puskesmas", "Kode", "Sasaran", "Realisasi", "% Capaian", "Status"]],
+            head: [
+              [
+                "No",
+                "Nama Puskesmas",
+                "Kode",
+                "Sasaran",
+                "Realisasi",
+                "% Capaian",
+                "Status",
+              ],
+            ],
             body: tableData,
-            foot: grandTotal ? [[
-              "",
-              "TOTAL KABUPATEN",
-              "",
-              grandTotal.target.toLocaleString("id-ID"),
-              grandTotal.realization.toLocaleString("id-ID"),
-              `${grandTotal.percentage}%`,
-              grandTotal.status,
-            ]] : [],
+            foot: grandTotal
+              ? [
+                  [
+                    "",
+                    "TOTAL KABUPATEN",
+                    "",
+                    grandTotal.target.toLocaleString("id-ID"),
+                    grandTotal.realization.toLocaleString("id-ID"),
+                    `${grandTotal.percentage}%`,
+                    grandTotal.status,
+                  ],
+                ]
+              : [],
             theme: "grid",
-            headStyles: { fillColor: [30, 58, 138], fontSize: 9, halign: "center", fontStyle: "bold" },
+            headStyles: {
+              fillColor: [30, 58, 138],
+              fontSize: 9,
+              halign: "center",
+              fontStyle: "bold",
+            },
             bodyStyles: { fontSize: 8 },
-            footStyles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontSize: 9, fontStyle: "bold" },
+            footStyles: {
+              fillColor: [51, 65, 85],
+              textColor: [255, 255, 255],
+              fontSize: 9,
+              fontStyle: "bold",
+            },
             columnStyles: {
               0: { halign: "center", cellWidth: 12 },
               1: { cellWidth: 55 },
@@ -956,19 +1328,19 @@ export default function LaporanPage() {
             },
             didParseCell: function (data) {
               if (data.column.index === 6 && data.section === "body") {
-                data.cell.styles.textColor = data.cell.raw === "TUNTAS" ? [5, 150, 105] : [220, 38, 38];
+                data.cell.styles.textColor =
+                  data.cell.raw === "TUNTAS" ? [5, 150, 105] : [220, 38, 38];
                 data.cell.styles.fontStyle = "bold";
               }
             },
           });
         }
-
       } else {
         // ============================================
         // MODE DETAIL - FORMAT SPM SECTION A & B
         // ============================================
         const pkmName = getSelectedPuskesmasName();
-        
+
         if (isSemua) {
           // ============================================
           // SEMUA_PROGRAM: 4 SECTION TERPISAH per penyakit
@@ -977,54 +1349,95 @@ export default function LaporanPage() {
           doc.setFont("helvetica", "bold");
           doc.text(`PUSKESMAS: ${pkmName.toUpperCase()}`, 14, currentY);
           currentY += 8;
-          
+
           for (let progIdx = 0; progIdx < PROGRAM_LIST.length; progIdx++) {
             const progType = PROGRAM_LIST[progIdx];
             const prog = getProgram(progType);
             const catData = calculateCategoryData(progType);
             const progColor = PROGRAM_COLORS[progType];
-            
+
             // Add new page if needed
             if (currentY > pageHeight - 100) {
               doc.addPage();
               currentY = 20;
             }
-            
+
             // Section Header
             doc.setFillColor(...progColor);
             doc.rect(14, currentY, pageWidth - 28, 8, "F");
             doc.setTextColor(255, 255, 255);
             doc.setFontSize(10);
             doc.setFont("helvetica", "bold");
-            doc.text(`SECTION ${progIdx + 1}: ${prog.description?.toUpperCase() || prog.label.toUpperCase()}`, 16, currentY + 5.5);
+            doc.text(
+              `SECTION ${progIdx + 1}: ${prog.description?.toUpperCase() || prog.label.toUpperCase()}`,
+              16,
+              currentY + 5.5,
+            );
             doc.setTextColor(0, 0, 0);
             currentY += 12;
-            
+
             // Part A - Layanan Dasar
             doc.setFontSize(9);
             doc.setFont("helvetica", "bold");
             doc.text("A. PENERIMAAN LAYANAN DASAR (80%)", 14, currentY);
             currentY += 4;
-            
+
             const partAIndicators = prog.indicators?.partA || [];
             const partAData = partAIndicators.map((name, idx) => {
               const d = catData.indicatorData[name];
               if (d) {
-                const pct = d.target > 0 ? ((d.realization / d.target) * 100).toFixed(2) : "0.00";
-                return [idx + 1, name, d.unit, d.target.toLocaleString("id-ID"), d.realization.toLocaleString("id-ID"), `${pct}%`];
+                const pct =
+                  d.target > 0
+                    ? ((d.realization / d.target) * 100).toFixed(2)
+                    : "0.00";
+                return [
+                  idx + 1,
+                  name,
+                  d.unit,
+                  d.target.toLocaleString("id-ID"),
+                  d.realization.toLocaleString("id-ID"),
+                  `${pct}%`,
+                ];
               }
               return [idx + 1, name, "-", "0", "0", "0%"];
             });
-            
+
             autoTable(doc, {
               startY: currentY,
-              head: [["No", "Indikator", "Satuan", "Sasaran", "Realisasi", "% Capaian"]],
+              head: [
+                [
+                  "No",
+                  "Indikator",
+                  "Satuan",
+                  "Sasaran",
+                  "Realisasi",
+                  "% Capaian",
+                ],
+              ],
               body: partAData,
-              foot: [["", "SUBTOTAL (A)", "", catData.partA.target.toLocaleString("id-ID"), catData.partA.realization.toLocaleString("id-ID"), `${catData.partA.percentage}%`]],
+              foot: [
+                [
+                  "",
+                  "SUBTOTAL (A)",
+                  "",
+                  catData.partA.target.toLocaleString("id-ID"),
+                  catData.partA.realization.toLocaleString("id-ID"),
+                  `${catData.partA.percentage}%`,
+                ],
+              ],
               theme: "grid",
-              headStyles: { fillColor: [100, 116, 139], fontSize: 7, halign: "center" },
+              headStyles: {
+                fillColor: [100, 116, 139],
+                fontSize: 7,
+                halign: "center",
+              },
               bodyStyles: { fontSize: 7 },
-              footStyles: { fillColor: [71, 85, 105], textColor: [255, 255, 255], fontSize: 7, fontStyle: "bold" },
+              footStyles: {
+                fillColor: [71, 85, 105],
+                textColor: [255, 255, 255],
+                fontSize: 7,
+                fontStyle: "bold",
+              },
               columnStyles: {
                 0: { halign: "center", cellWidth: 8 },
                 1: { cellWidth: 50 },
@@ -1034,35 +1447,72 @@ export default function LaporanPage() {
                 5: { halign: "center", cellWidth: 18 },
               },
             });
-            
+
             currentY = doc.lastAutoTable.finalY + 4;
-            
+
             // Part B - Mutu Minimal (simplified for PDF)
             doc.setFontSize(9);
             doc.setFont("helvetica", "bold");
             doc.text("B. MUTU MINIMAL LAYANAN DASAR (20%)", 14, currentY);
             currentY += 4;
-            
+
             const partBBarang = prog.indicators?.partBBarang || [];
             const partBSDM = prog.indicators?.partBSDM || [];
             const partBData = [...partBBarang, ...partBSDM].map((name, idx) => {
               const d = catData.indicatorData[name];
               if (d) {
-                const pct = d.target > 0 ? ((d.realization / d.target) * 100).toFixed(2) : "0.00";
-                return [idx + 1, name, d.unit, d.target.toLocaleString("id-ID"), d.realization.toLocaleString("id-ID"), `${pct}%`];
+                const pct =
+                  d.target > 0
+                    ? ((d.realization / d.target) * 100).toFixed(2)
+                    : "0.00";
+                return [
+                  idx + 1,
+                  name,
+                  d.unit,
+                  d.target.toLocaleString("id-ID"),
+                  d.realization.toLocaleString("id-ID"),
+                  `${pct}%`,
+                ];
               }
               return [idx + 1, name, "-", "0", "0", "0%"];
             });
-            
+
             autoTable(doc, {
               startY: currentY,
-              head: [["No", "Indikator Barang/Jasa/SDM", "Satuan", "Target", "Realisasi", "% Capaian"]],
+              head: [
+                [
+                  "No",
+                  "Indikator Barang/Jasa/SDM",
+                  "Satuan",
+                  "Target",
+                  "Realisasi",
+                  "% Capaian",
+                ],
+              ],
               body: partBData,
-              foot: [["", "SUBTOTAL (B)", "", catData.partB.target.toLocaleString("id-ID"), catData.partB.realization.toLocaleString("id-ID"), `${catData.partB.percentage}%`]],
+              foot: [
+                [
+                  "",
+                  "SUBTOTAL (B)",
+                  "",
+                  catData.partB.target.toLocaleString("id-ID"),
+                  catData.partB.realization.toLocaleString("id-ID"),
+                  `${catData.partB.percentage}%`,
+                ],
+              ],
               theme: "grid",
-              headStyles: { fillColor: progColor, fontSize: 7, halign: "center" },
+              headStyles: {
+                fillColor: progColor,
+                fontSize: 7,
+                halign: "center",
+              },
               bodyStyles: { fontSize: 6 },
-              footStyles: { fillColor: [71, 85, 105], textColor: [255, 255, 255], fontSize: 7, fontStyle: "bold" },
+              footStyles: {
+                fillColor: [71, 85, 105],
+                textColor: [255, 255, 255],
+                fontSize: 7,
+                fontStyle: "bold",
+              },
               columnStyles: {
                 0: { halign: "center", cellWidth: 8 },
                 1: { cellWidth: 50 },
@@ -1072,31 +1522,53 @@ export default function LaporanPage() {
                 5: { halign: "center", cellWidth: 18 },
               },
             });
-            
+
             currentY = doc.lastAutoTable.finalY + 4;
-            
+
             // Summary per program
-            const nilaiA = (parseFloat(catData.partA.percentage) * 0.8).toFixed(2);
-            const nilaiB = (parseFloat(catData.partB.percentage) * 0.2).toFixed(2);
-            const totalNilai = (parseFloat(nilaiA) + parseFloat(nilaiB)).toFixed(2);
-            const statusFinal = parseFloat(totalNilai) >= 80 ? "TUNTAS" : "BELUM TUNTAS";
-            
+            const nilaiA = (parseFloat(catData.partA.percentage) * 0.8).toFixed(
+              2,
+            );
+            const nilaiB = (parseFloat(catData.partB.percentage) * 0.2).toFixed(
+              2,
+            );
+            const totalNilai = (
+              parseFloat(nilaiA) + parseFloat(nilaiB)
+            ).toFixed(2);
+            const statusFinal =
+              parseFloat(totalNilai) >= 80 ? "TUNTAS" : "BELUM TUNTAS";
+
             autoTable(doc, {
               startY: currentY,
               head: [["Komponen", "Bobot", "Capaian", "Nilai"]],
               body: [
-                ["A. Layanan Dasar", "80%", `${catData.partA.percentage}%`, nilaiA],
-                ["B. Mutu Minimal", "20%", `${catData.partB.percentage}%`, nilaiB],
+                [
+                  "A. Layanan Dasar",
+                  "80%",
+                  `${catData.partA.percentage}%`,
+                  nilaiA,
+                ],
+                [
+                  "B. Mutu Minimal",
+                  "20%",
+                  `${catData.partB.percentage}%`,
+                  nilaiB,
+                ],
               ],
               foot: [["NILAI AKHIR", "100%", statusFinal, totalNilai]],
               theme: "grid",
-              headStyles: { fillColor: [30, 41, 59], fontSize: 7, halign: "center" },
+              headStyles: {
+                fillColor: [30, 41, 59],
+                fontSize: 7,
+                halign: "center",
+              },
               bodyStyles: { fontSize: 7 },
-              footStyles: { 
-                fillColor: statusFinal === "TUNTAS" ? [5, 150, 105] : [220, 38, 38], 
-                textColor: [255, 255, 255], 
-                fontSize: 8, 
-                fontStyle: "bold" 
+              footStyles: {
+                fillColor:
+                  statusFinal === "TUNTAS" ? [5, 150, 105] : [220, 38, 38],
+                textColor: [255, 255, 255],
+                fontSize: 8,
+                fontStyle: "bold",
               },
               columnStyles: {
                 0: { cellWidth: 35 },
@@ -1105,16 +1577,15 @@ export default function LaporanPage() {
                 3: { halign: "center", cellWidth: 18 },
               },
             });
-            
+
             currentY = doc.lastAutoTable.finalY + 12;
           }
-          
         } else {
           // ============================================
           // PROGRAM TUNGGAL - Format Section A & B lengkap
           // ============================================
           const catData = calculateCategoryData();
-          
+
           doc.setFontSize(11);
           doc.setFont("helvetica", "bold");
           doc.text(`PUSKESMAS: ${pkmName.toUpperCase()}`, 14, currentY);
@@ -1125,7 +1596,11 @@ export default function LaporanPage() {
           doc.rect(14, currentY, pageWidth - 28, 7, "F");
           doc.setTextColor(255, 255, 255);
           doc.setFontSize(10);
-          doc.text("PERSENTASE PENCAPAIAN PENERIMAAN LAYANAN DASAR (80%)", 16, currentY + 5);
+          doc.text(
+            "PERSENTASE PENCAPAIAN PENERIMAAN LAYANAN DASAR (80%)",
+            16,
+            currentY + 5,
+          );
           doc.setTextColor(0, 0, 0);
           currentY += 10;
 
@@ -1139,22 +1614,62 @@ export default function LaporanPage() {
           const partAData = partAIndicators.map((name, idx) => {
             const d = catData.indicatorData[name];
             if (d) {
-              const pct = d.target > 0 ? ((d.realization / d.target) * 100).toFixed(2) : "0.00";
+              const pct =
+                d.target > 0
+                  ? ((d.realization / d.target) * 100).toFixed(2)
+                  : "0.00";
               const status = parseFloat(pct) >= 80 ? "TUNTAS" : "BELUM";
-              return [idx + 1, name, d.unit, d.target.toLocaleString("id-ID"), d.realization.toLocaleString("id-ID"), `${pct}%`, status];
+              return [
+                idx + 1,
+                name,
+                d.unit,
+                d.target.toLocaleString("id-ID"),
+                d.realization.toLocaleString("id-ID"),
+                `${pct}%`,
+                status,
+              ];
             }
             return [idx + 1, name, "-", "0", "0", "0%", "N/A"];
           });
 
           autoTable(doc, {
             startY: currentY,
-            head: [["No", "Indikator", "Satuan", "Sasaran", "Realisasi", "% Capaian", "Status"]],
+            head: [
+              [
+                "No",
+                "Indikator",
+                "Satuan",
+                "Sasaran",
+                "Realisasi",
+                "% Capaian",
+                "Status",
+              ],
+            ],
             body: partAData,
-            foot: [["", "SUBTOTAL LAYANAN DASAR (A)", "", catData.partA.target.toLocaleString("id-ID"), catData.partA.realization.toLocaleString("id-ID"), `${catData.partA.percentage}%`, parseFloat(catData.partA.percentage) >= 80 ? "TUNTAS" : "BELUM"]],
+            foot: [
+              [
+                "",
+                "SUBTOTAL LAYANAN DASAR (A)",
+                "",
+                catData.partA.target.toLocaleString("id-ID"),
+                catData.partA.realization.toLocaleString("id-ID"),
+                `${catData.partA.percentage}%`,
+                parseFloat(catData.partA.percentage) >= 80 ? "TUNTAS" : "BELUM",
+              ],
+            ],
             theme: "grid",
-            headStyles: { fillColor: [100, 116, 139], fontSize: 8, halign: "center" },
+            headStyles: {
+              fillColor: [100, 116, 139],
+              fontSize: 8,
+              halign: "center",
+            },
             bodyStyles: { fontSize: 8 },
-            footStyles: { fillColor: [71, 85, 105], textColor: [255, 255, 255], fontSize: 8, fontStyle: "bold" },
+            footStyles: {
+              fillColor: [71, 85, 105],
+              textColor: [255, 255, 255],
+              fontSize: 8,
+              fontStyle: "bold",
+            },
             columnStyles: {
               0: { halign: "center", cellWidth: 10 },
               1: { cellWidth: 55 },
@@ -1165,8 +1680,12 @@ export default function LaporanPage() {
               6: { halign: "center", cellWidth: 20 },
             },
             didParseCell: function (data) {
-              if (data.column.index === 6 && (data.section === "body" || data.section === "foot")) {
-                data.cell.styles.textColor = data.cell.raw === "TUNTAS" ? [5, 150, 105] : [220, 38, 38];
+              if (
+                data.column.index === 6 &&
+                (data.section === "body" || data.section === "foot")
+              ) {
+                data.cell.styles.textColor =
+                  data.cell.raw === "TUNTAS" ? [5, 150, 105] : [220, 38, 38];
                 data.cell.styles.fontStyle = "bold";
               }
             },
@@ -1180,7 +1699,11 @@ export default function LaporanPage() {
           doc.setTextColor(255, 255, 255);
           doc.setFontSize(10);
           doc.setFont("helvetica", "bold");
-          doc.text("PERSENTASE PENCAPAIAN MUTU MINIMAL LAYANAN DASAR (20%)", 16, currentY + 5);
+          doc.text(
+            "PERSENTASE PENCAPAIAN MUTU MINIMAL LAYANAN DASAR (20%)",
+            16,
+            currentY + 5,
+          );
           doc.setTextColor(0, 0, 0);
           currentY += 10;
 
@@ -1190,22 +1713,46 @@ export default function LaporanPage() {
           doc.text("B.1 BARANG / JASA", 14, currentY);
           currentY += 4;
 
-          const partBBarangIndicators = programConfig.indicators?.partBBarang || [];
+          const partBBarangIndicators =
+            programConfig.indicators?.partBBarang || [];
           const partBBarangData = partBBarangIndicators.map((name, idx) => {
             const d = catData.indicatorData[name];
             if (d) {
-              const pct = d.target > 0 ? ((d.realization / d.target) * 100).toFixed(2) : "0.00";
-              return [idx + 1, name, d.unit, d.target.toLocaleString("id-ID"), d.realization.toLocaleString("id-ID"), `${pct}%`];
+              const pct =
+                d.target > 0
+                  ? ((d.realization / d.target) * 100).toFixed(2)
+                  : "0.00";
+              return [
+                idx + 1,
+                name,
+                d.unit,
+                d.target.toLocaleString("id-ID"),
+                d.realization.toLocaleString("id-ID"),
+                `${pct}%`,
+              ];
             }
             return [idx + 1, name, "-", "0", "0", "0%"];
           });
 
           autoTable(doc, {
             startY: currentY,
-            head: [["No", "Indikator Barang/Jasa", "Satuan", "Target", "Realisasi", "% Capaian"]],
+            head: [
+              [
+                "No",
+                "Indikator Barang/Jasa",
+                "Satuan",
+                "Target",
+                "Realisasi",
+                "% Capaian",
+              ],
+            ],
             body: partBBarangData,
             theme: "grid",
-            headStyles: { fillColor: [5, 150, 105], fontSize: 8, halign: "center" },
+            headStyles: {
+              fillColor: [5, 150, 105],
+              fontSize: 8,
+              halign: "center",
+            },
             bodyStyles: { fontSize: 7 },
             columnStyles: {
               0: { halign: "center", cellWidth: 10 },
@@ -1235,21 +1782,58 @@ export default function LaporanPage() {
           const partBSDMData = partBSDMIndicators.map((name, idx) => {
             const d = catData.indicatorData[name];
             if (d) {
-              const pct = d.target > 0 ? ((d.realization / d.target) * 100).toFixed(2) : "0.00";
-              return [idx + 1, name, d.unit, d.target.toLocaleString("id-ID"), d.realization.toLocaleString("id-ID"), `${pct}%`];
+              const pct =
+                d.target > 0
+                  ? ((d.realization / d.target) * 100).toFixed(2)
+                  : "0.00";
+              return [
+                idx + 1,
+                name,
+                d.unit,
+                d.target.toLocaleString("id-ID"),
+                d.realization.toLocaleString("id-ID"),
+                `${pct}%`,
+              ];
             }
             return [idx + 1, name, "-", "0", "0", "0%"];
           });
 
           autoTable(doc, {
             startY: currentY,
-            head: [["No", "Indikator SDM", "Satuan", "Target", "Realisasi", "% Capaian"]],
+            head: [
+              [
+                "No",
+                "Indikator SDM",
+                "Satuan",
+                "Target",
+                "Realisasi",
+                "% Capaian",
+              ],
+            ],
             body: partBSDMData,
-            foot: [["", "SUBTOTAL MUTU MINIMAL (B)", "", catData.partB.target.toLocaleString("id-ID"), catData.partB.realization.toLocaleString("id-ID"), `${catData.partB.percentage}%`]],
+            foot: [
+              [
+                "",
+                "SUBTOTAL MUTU MINIMAL (B)",
+                "",
+                catData.partB.target.toLocaleString("id-ID"),
+                catData.partB.realization.toLocaleString("id-ID"),
+                `${catData.partB.percentage}%`,
+              ],
+            ],
             theme: "grid",
-            headStyles: { fillColor: [124, 58, 237], fontSize: 8, halign: "center" },
+            headStyles: {
+              fillColor: [124, 58, 237],
+              fontSize: 8,
+              halign: "center",
+            },
             bodyStyles: { fontSize: 7 },
-            footStyles: { fillColor: [109, 40, 217], textColor: [255, 255, 255], fontSize: 8, fontStyle: "bold" },
+            footStyles: {
+              fillColor: [109, 40, 217],
+              textColor: [255, 255, 255],
+              fontSize: 8,
+              fontStyle: "bold",
+            },
             columnStyles: {
               0: { halign: "center", cellWidth: 10 },
               1: { cellWidth: 60 },
@@ -1268,10 +1852,17 @@ export default function LaporanPage() {
             currentY = 20;
           }
 
-          const nilaiA = (parseFloat(catData.partA.percentage) * 0.8).toFixed(2);
-          const nilaiB = (parseFloat(catData.partB.percentage) * 0.2).toFixed(2);
-          const totalNilai = (parseFloat(nilaiA) + parseFloat(nilaiB)).toFixed(2);
-          const statusFinal = parseFloat(totalNilai) >= 80 ? "TUNTAS" : "BELUM TUNTAS";
+          const nilaiA = (parseFloat(catData.partA.percentage) * 0.8).toFixed(
+            2,
+          );
+          const nilaiB = (parseFloat(catData.partB.percentage) * 0.2).toFixed(
+            2,
+          );
+          const totalNilai = (parseFloat(nilaiA) + parseFloat(nilaiB)).toFixed(
+            2,
+          );
+          const statusFinal =
+            parseFloat(totalNilai) >= 80 ? "TUNTAS" : "BELUM TUNTAS";
 
           doc.setFillColor(51, 65, 85);
           doc.rect(14, currentY, pageWidth - 28, 7, "F");
@@ -1286,21 +1877,36 @@ export default function LaporanPage() {
             startY: currentY,
             head: [["Komponen", "Bobot", "Capaian (%)", "Nilai Tertimbang"]],
             body: [
-              ["A. Layanan Dasar", "80%", `${catData.partA.percentage}%`, nilaiA],
-              ["B. Mutu Minimal", "20%", `${catData.partB.percentage}%`, nilaiB],
+              [
+                "A. Layanan Dasar",
+                "80%",
+                `${catData.partA.percentage}%`,
+                nilaiA,
+              ],
+              [
+                "B. Mutu Minimal",
+                "20%",
+                `${catData.partB.percentage}%`,
+                nilaiB,
+              ],
             ],
             foot: [
               ["TOTAL NILAI AKHIR SPM", "100%", "", totalNilai],
               ["STATUS CAPAIAN", "", "", statusFinal],
             ],
             theme: "grid",
-            headStyles: { fillColor: [30, 41, 59], fontSize: 9, halign: "center" },
+            headStyles: {
+              fillColor: [30, 41, 59],
+              fontSize: 9,
+              halign: "center",
+            },
             bodyStyles: { fontSize: 9 },
-            footStyles: { 
-              fillColor: statusFinal === "TUNTAS" ? [5, 150, 105] : [220, 38, 38], 
-              textColor: [255, 255, 255], 
-              fontSize: 10, 
-              fontStyle: "bold" 
+            footStyles: {
+              fillColor:
+                statusFinal === "TUNTAS" ? [5, 150, 105] : [220, 38, 38],
+              textColor: [255, 255, 255],
+              fontSize: 10,
+              fontStyle: "bold",
             },
             columnStyles: {
               0: { cellWidth: 50 },
@@ -1315,8 +1921,10 @@ export default function LaporanPage() {
       // ============================================
       // FOOTER - TTD dan Tanggal
       // ============================================
-      const footerY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 15 : currentY + 15;
-      
+      const footerY = doc.lastAutoTable
+        ? doc.lastAutoTable.finalY + 15
+        : currentY + 15;
+
       if (footerY < pageHeight - 45) {
         doc.setFontSize(9);
         doc.setFont("helvetica", "normal");
@@ -1406,7 +2014,9 @@ export default function LaporanPage() {
                   }`}
                 >
                   <span className="text-xl mr-2">{program.icon}</span>
-                  <span className="text-sm md:text-base">{program.shortLabel}</span>
+                  <span className="text-sm md:text-base">
+                    {program.shortLabel}
+                  </span>
                 </button>
               );
             })}
@@ -1421,7 +2031,9 @@ export default function LaporanPage() {
               <h2 className="text-lg font-semibold text-slate-800">
                 Filter Laporan - {programConfig.label}
               </h2>
-              <p className="text-sm text-slate-500">{programConfig.description}</p>
+              <p className="text-sm text-slate-500">
+                {programConfig.description}
+              </p>
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

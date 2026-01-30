@@ -19,6 +19,20 @@ export default function DataPage() {
   const [selectedPuskesmas, setSelectedPuskesmas] = useState("");
   const [periods, setPeriods] = useState([]);
 
+  // KEAMANAN: State untuk role dan puskesmas user
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [userPuskesmasCode, setUserPuskesmasCode] = useState(null);
+
+  // Helper: Check if user is admin based on email
+  const checkIsAdmin = (email) => {
+    const adminEmails = [
+      "kab@dinkes.go.id",
+      "admin@dinkes.go.id",
+      "admin@example.com",
+    ];
+    return adminEmails.includes(email?.toLowerCase());
+  };
+
   useEffect(() => {
     checkAuth();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -32,11 +46,22 @@ export default function DataPage() {
       router.push("/login");
     } else {
       setUser(session.user);
-      loadData();
+
+      // KEAMANAN: Set role dan puskesmas code berdasarkan email
+      const adminStatus = checkIsAdmin(session.user.email);
+      setIsAdmin(adminStatus);
+
+      if (!adminStatus) {
+        const emailCode = session.user.email.split("@")[0].toUpperCase();
+        setUserPuskesmasCode(emailCode);
+        setSelectedPuskesmas(emailCode); // Auto-select puskesmas untuk non-admin
+      }
+
+      loadData(adminStatus, session.user.email);
     }
   };
 
-  const loadData = async () => {
+  const loadData = async (adminStatus = isAdmin, userEmail = user?.email) => {
     setLoading(true);
     const { data: puskesmasData } = await supabase
       .from("puskesmas")
@@ -44,11 +69,20 @@ export default function DataPage() {
       .order("name");
     setPuskesmasList(puskesmasData || []);
 
-    const { data: achievementsData } = await supabase
+    // KEAMANAN: Build query dengan filter berdasarkan role
+    let query = supabase
       .from("achievements")
       .select("*")
       .order("period", { ascending: false })
       .order("puskesmas_code", { ascending: true });
+
+    // Jika bukan admin, filter ke puskesmas sendiri
+    if (!adminStatus && userEmail) {
+      const emailCode = userEmail.split("@")[0].toUpperCase();
+      query = query.eq("puskesmas_code", emailCode);
+    }
+
+    const { data: achievementsData } = await query;
 
     if (achievementsData) {
       setData(achievementsData);
@@ -76,6 +110,18 @@ export default function DataPage() {
   };
 
   const startEdit = (row) => {
+    // KEAMANAN: Non-admin hanya bisa edit data puskesmas sendiri
+    if (
+      !isAdmin &&
+      userPuskesmasCode &&
+      row.puskesmas_code !== userPuskesmasCode
+    ) {
+      showMessage(
+        "error",
+        "Anda hanya dapat mengedit data Puskesmas Anda sendiri!",
+      );
+      return;
+    }
     setEditingId(row.id);
     setEditForm({
       target_qty: row.target_qty,
@@ -90,12 +136,24 @@ export default function DataPage() {
   };
 
   const saveEdit = async (id) => {
+    // KEAMANAN: Verifikasi kepemilikan data sebelum update
+    const rowToEdit = data.find((d) => d.id === id);
+    if (
+      !isAdmin &&
+      userPuskesmasCode &&
+      rowToEdit?.puskesmas_code !== userPuskesmasCode
+    ) {
+      showMessage("error", "Anda tidak memiliki izin untuk mengedit data ini!");
+      return;
+    }
+
     setSaving(true);
     const target_qty = parseFloat(editForm.target_qty) || 0;
     const realization_qty = parseFloat(editForm.realization_qty) || 0;
     const unserved_qty = parseFloat(editForm.unserved_qty) || 0;
 
-    const { error } = await supabase
+    // KEAMANAN: Tambahkan filter puskesmas_code untuk non-admin
+    let updateQuery = supabase
       .from("achievements")
       .update({
         target_qty,
@@ -105,27 +163,54 @@ export default function DataPage() {
       })
       .eq("id", id);
 
+    if (!isAdmin && userPuskesmasCode) {
+      updateQuery = updateQuery.eq("puskesmas_code", userPuskesmasCode);
+    }
+
+    const { error } = await updateQuery;
+
     if (error) {
       showMessage("error", "Gagal menyimpan: " + error.message);
     } else {
       showMessage("success", "Data berhasil disimpan");
       setEditingId(null);
       setEditForm({});
-      loadData();
+      loadData(isAdmin, user?.email);
     }
     setSaving(false);
   };
 
   const deleteRow = async (id) => {
+    // KEAMANAN: Verifikasi kepemilikan data sebelum delete
+    const rowToDelete = data.find((d) => d.id === id);
+    if (
+      !isAdmin &&
+      userPuskesmasCode &&
+      rowToDelete?.puskesmas_code !== userPuskesmasCode
+    ) {
+      showMessage(
+        "error",
+        "Anda tidak memiliki izin untuk menghapus data ini!",
+      );
+      return;
+    }
+
     if (!confirm("Yakin ingin menghapus data ini?")) return;
 
-    const { error } = await supabase.from("achievements").delete().eq("id", id);
+    // KEAMANAN: Tambahkan filter puskesmas_code untuk non-admin
+    let deleteQuery = supabase.from("achievements").delete().eq("id", id);
+
+    if (!isAdmin && userPuskesmasCode) {
+      deleteQuery = deleteQuery.eq("puskesmas_code", userPuskesmasCode);
+    }
+
+    const { error } = await deleteQuery;
 
     if (error) {
       showMessage("error", "Gagal menghapus: " + error.message);
     } else {
       showMessage("success", "Data berhasil dihapus");
-      loadData();
+      loadData(isAdmin, user?.email);
     }
   };
 
@@ -134,17 +219,24 @@ export default function DataPage() {
     if (!confirm(`Yakin ingin menghapus SEMUA data periode ${selectedPeriod}?`))
       return;
 
-    const { error } = await supabase
+    // KEAMANAN: Tambahkan filter puskesmas untuk non-admin agar hanya hapus data sendiri
+    let deleteQuery = supabase
       .from("achievements")
       .delete()
       .eq("period", selectedPeriod);
+
+    if (!isAdmin && userPuskesmasCode) {
+      deleteQuery = deleteQuery.eq("puskesmas_code", userPuskesmasCode);
+    }
+
+    const { error } = await deleteQuery;
 
     if (error) {
       showMessage("error", "Gagal menghapus: " + error.message);
     } else {
       showMessage("success", `Data periode ${selectedPeriod} berhasil dihapus`);
       setSelectedPeriod("");
-      loadData();
+      loadData(isAdmin, user?.email);
     }
   };
 
@@ -181,15 +273,21 @@ export default function DataPage() {
               <select
                 value={selectedPuskesmas}
                 onChange={(e) => setSelectedPuskesmas(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white text-sm"
+                disabled={!isAdmin}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
               >
-                <option value="">Semua Puskesmas</option>
+                {isAdmin && <option value="">Semua Puskesmas</option>}
                 {puskesmasList.map((p) => (
                   <option key={p.code} value={p.code}>
                     {p.code} - {p.name}
                   </option>
                 ))}
               </select>
+              {!isAdmin && (
+                <span className="text-xs text-gray-500 ml-2">
+                  * Hanya data puskesmas sendiri
+                </span>
+              )}
               {selectedPeriod && (
                 <button
                   onClick={deletePeriod}

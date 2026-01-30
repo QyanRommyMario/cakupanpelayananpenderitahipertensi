@@ -8,14 +8,14 @@ import { isValidProgramType } from "@/utils/constants";
  * @returns {Promise<Array<{indicator_name: string, unit: string}>>}
  */
 export async function getUniqueIndicators(programType = null) {
-  let query = supabase
-    .from("achievements")
-    .select("indicator_name, unit");
+  let query = supabase.from("achievements").select("indicator_name, unit");
 
   // Filter by program type if provided
   if (programType) {
     if (!isValidProgramType(programType)) {
-      throw new Error(`getUniqueIndicators: programType tidak valid: "${programType}"`);
+      throw new Error(
+        `getUniqueIndicators: programType tidak valid: "${programType}"`,
+      );
     }
     query = query.eq("program_type", programType);
   }
@@ -98,19 +98,23 @@ export async function getPuskesmasByCode(code) {
  * @returns {Promise<Array>}
  * @throws {Error} if programType is not provided or invalid
  */
-export async function getAchievements(puskesmasCode, period = null, programType) {
+export async function getAchievements(
+  puskesmasCode,
+  period = null,
+  programType,
+) {
   // KEAMANAN: Validasi programType - WAJIB
   if (!programType) {
     throw new Error(
       "getAchievements: programType WAJIB diisi. " +
-      "Jangan gunakan default value untuk mencegah Silent Data Corruption."
+        "Jangan gunakan default value untuk mencegah Silent Data Corruption.",
     );
   }
 
   if (!isValidProgramType(programType)) {
     throw new Error(
       `getAchievements: programType tidak valid: "${programType}". ` +
-      `Gunakan nilai dari PROGRAM_TYPES (constants.js).`
+        `Gunakan nilai dari PROGRAM_TYPES (constants.js).`,
     );
   }
 
@@ -164,15 +168,15 @@ export async function upsertAchievements(records) {
   // KEAMANAN: Validasi setiap record harus punya program_type
   for (const record of records) {
     if (!record.program_type) {
-      return { 
-        success: false, 
-        error: "upsertAchievements: Setiap record WAJIB memiliki program_type." 
+      return {
+        success: false,
+        error: "upsertAchievements: Setiap record WAJIB memiliki program_type.",
       };
     }
     if (!isValidProgramType(record.program_type)) {
-      return { 
-        success: false, 
-        error: `upsertAchievements: program_type tidak valid: "${record.program_type}"` 
+      return {
+        success: false,
+        error: `upsertAchievements: program_type tidak valid: "${record.program_type}"`,
       };
     }
   }
@@ -210,6 +214,26 @@ export function calculateMetrics(target, realization) {
 }
 
 /**
+ * Admin email list - centralized configuration
+ * Digunakan untuk mengecek apakah user adalah admin
+ */
+export const ADMIN_EMAILS = [
+  "kab@dinkes.go.id",
+  "admin@dinkes.go.id",
+  "admin@example.com",
+];
+
+/**
+ * Check if email belongs to admin
+ * @param {string} email - User email
+ * @returns {boolean}
+ */
+export function isAdminEmail(email) {
+  if (!email) return false;
+  return ADMIN_EMAILS.includes(email.toLowerCase());
+}
+
+/**
  * Get current user's puskesmas info from their email
  * @param {string} email - User email (e.g., "ant@dinkes.go.id")
  * @returns {{code: string, isAdmin: boolean}}
@@ -217,8 +241,7 @@ export function calculateMetrics(target, realization) {
 export function parseUserEmail(email) {
   if (!email) return { code: null, isAdmin: false };
 
-  const adminEmails = ["kab@dinkes.go.id", "admin@dinkes.go.id"];
-  if (adminEmails.includes(email.toLowerCase())) {
+  if (isAdminEmail(email)) {
     return { code: "KAB", isAdmin: true };
   }
 
@@ -274,24 +297,42 @@ export function generatePeriodOptions(yearsBack = 2) {
 /**
  * Fetch Global Summary - Aggregated data for ALL programs and ALL Puskesmas
  * Used for the Command Center Overview page
+ * KEAMANAN: Mendukung filter puskesmas untuk role non-admin
  * @param {string} period - Period to filter (from periods.js)
  * @param {Array<string>} periods - Array of periods (for annual recap)
+ * @param {string|null} puskesmasCode - Filter to specific puskesmas (for non-admin users)
  * @returns {Promise<{
  *   puskesmasScores: Array<{code: string, name: string, hipertensi: number, diabetes: number, odgj: number, avg: number}>,
  *   programTotals: {hipertensi: {target: number, realization: number, percentage: number}, ...},
  *   grandTotal: {target: number, realization: number, percentage: number}
  * }>}
  */
-export async function getGlobalSummary(period = null, periods = null) {
+export async function getGlobalSummary(
+  period = null,
+  periods = null,
+  puskesmasCode = null,
+) {
   try {
     // Fetch all Puskesmas first
-    const puskesmasList = await getAllPuskesmas(true); // exclude KAB
-    
+    let puskesmasList = await getAllPuskesmas(true); // exclude KAB
+
+    // KEAMANAN: Jika puskesmasCode di-provide, filter list puskesmas
+    if (puskesmasCode) {
+      puskesmasList = puskesmasList.filter((p) => p.code === puskesmasCode);
+    }
+
     // Build query for achievements
     let query = supabase
       .from("achievements")
-      .select("puskesmas_code, program_type, target_qty, realization_qty, indicator_name")
+      .select(
+        "puskesmas_code, program_type, target_qty, realization_qty, indicator_name",
+      )
       .neq("puskesmas_code", "KAB");
+
+    // KEAMANAN: Filter by puskesmas jika di-provide
+    if (puskesmasCode) {
+      query = query.eq("puskesmas_code", puskesmasCode);
+    }
 
     // Filter by period(s)
     if (periods && periods.length > 0) {
@@ -331,7 +372,7 @@ export async function getGlobalSummary(period = null, periods = null) {
     // Aggregate data - Only count "JUMLAH YANG HARUS DILAYANI" for main metric
     (achievements || []).forEach((row) => {
       if (row.indicator_name !== "JUMLAH YANG HARUS DILAYANI") return;
-      
+
       const code = row.puskesmas_code;
       const program = row.program_type;
       const target = parseFloat(row.target_qty) || 0;
@@ -340,10 +381,10 @@ export async function getGlobalSummary(period = null, periods = null) {
       if (puskesmasMap[code] && program) {
         // Map program type to object key
         const programKeyMap = {
-          'USIA_PRODUKTIF': 'usiaProduktif',
-          'HIPERTENSI': 'hipertensi',
-          'DIABETES': 'diabetes',
-          'ODGJ': 'odgj'
+          USIA_PRODUKTIF: "usiaProduktif",
+          HIPERTENSI: "hipertensi",
+          DIABETES: "diabetes",
+          ODGJ: "odgj",
         };
         const programKey = programKeyMap[program];
         if (programKey && puskesmasMap[code][programKey]) {
@@ -374,12 +415,27 @@ export async function getGlobalSummary(period = null, periods = null) {
       // Calculate average (only count programs with data)
       let validPrograms = 0;
       let totalPct = 0;
-      if (pkm.usiaProduktif.target > 0) { validPrograms++; totalPct += usiaProduktifPct; }
-      if (pkm.hipertensi.target > 0) { validPrograms++; totalPct += hipertensiPct; }
-      if (pkm.diabetes.target > 0) { validPrograms++; totalPct += diabetesPct; }
-      if (pkm.odgj.target > 0) { validPrograms++; totalPct += odgjPct; }
+      if (pkm.usiaProduktif.target > 0) {
+        validPrograms++;
+        totalPct += usiaProduktifPct;
+      }
+      if (pkm.hipertensi.target > 0) {
+        validPrograms++;
+        totalPct += hipertensiPct;
+      }
+      if (pkm.diabetes.target > 0) {
+        validPrograms++;
+        totalPct += diabetesPct;
+      }
+      if (pkm.odgj.target > 0) {
+        validPrograms++;
+        totalPct += odgjPct;
+      }
 
-      const avg = validPrograms > 0 ? Math.round((totalPct / validPrograms) * 10) / 10 : 0;
+      const avg =
+        validPrograms > 0
+          ? Math.round((totalPct / validPrograms) * 10) / 10
+          : 0;
 
       return {
         code: pkm.code,
@@ -405,24 +461,31 @@ export async function getGlobalSummary(period = null, periods = null) {
       const data = programTotals[program];
       // Convert USIA_PRODUKTIF to usiaProduktif for consistency
       const keyMap = {
-        'USIA_PRODUKTIF': 'usiaProduktif',
-        'HIPERTENSI': 'hipertensi',
-        'DIABETES': 'diabetes',
-        'ODGJ': 'odgj'
+        USIA_PRODUKTIF: "usiaProduktif",
+        HIPERTENSI: "hipertensi",
+        DIABETES: "diabetes",
+        ODGJ: "odgj",
       };
       const key = keyMap[program] || program.toLowerCase();
       formattedProgramTotals[key] = {
         target: data.target,
         realization: data.realization,
-        percentage: data.target > 0 
-          ? Math.round((data.realization / data.target) * 100 * 10) / 10 
-          : 0,
+        percentage:
+          data.target > 0
+            ? Math.round((data.realization / data.target) * 100 * 10) / 10
+            : 0,
       };
     });
 
     // Grand total
-    const grandTarget = Object.values(programTotals).reduce((sum, p) => sum + p.target, 0);
-    const grandRealization = Object.values(programTotals).reduce((sum, p) => sum + p.realization, 0);
+    const grandTarget = Object.values(programTotals).reduce(
+      (sum, p) => sum + p.target,
+      0,
+    );
+    const grandRealization = Object.values(programTotals).reduce(
+      (sum, p) => sum + p.realization,
+      0,
+    );
 
     return {
       puskesmasScores,
@@ -430,9 +493,10 @@ export async function getGlobalSummary(period = null, periods = null) {
       grandTotal: {
         target: grandTarget,
         realization: grandRealization,
-        percentage: grandTarget > 0 
-          ? Math.round((grandRealization / grandTarget) * 100 * 10) / 10 
-          : 0,
+        percentage:
+          grandTarget > 0
+            ? Math.round((grandRealization / grandTarget) * 100 * 10) / 10
+            : 0,
       },
     };
   } catch (err) {
@@ -455,9 +519,15 @@ export async function getGlobalSummary(period = null, periods = null) {
  *   percentage: number
  * }>>}
  */
-export async function getProgramDetailData(programType, period = null, periods = null) {
+export async function getProgramDetailData(
+  programType,
+  period = null,
+  periods = null,
+) {
   if (!isValidProgramType(programType)) {
-    throw new Error(`getProgramDetailData: programType tidak valid: "${programType}"`);
+    throw new Error(
+      `getProgramDetailData: programType tidak valid: "${programType}"`,
+    );
   }
 
   try {
@@ -506,37 +576,45 @@ export async function getProgramDetailData(programType, period = null, periods =
         };
       }
 
-      pkmMap[code].indicators[indName].target += parseFloat(row.target_qty) || 0;
-      pkmMap[code].indicators[indName].realization += parseFloat(row.realization_qty) || 0;
+      pkmMap[code].indicators[indName].target +=
+        parseFloat(row.target_qty) || 0;
+      pkmMap[code].indicators[indName].realization +=
+        parseFloat(row.realization_qty) || 0;
     });
 
     // Calculate totals and format
-    return Object.values(pkmMap).map((pkm) => {
-      const indicatorList = Object.values(pkm.indicators).map((ind) => ({
-        ...ind,
-        percentage: ind.target > 0 
-          ? Math.round((ind.realization / ind.target) * 100 * 10) / 10 
-          : 0,
-        unserved: Math.max(0, ind.target - ind.realization),
-      }));
+    return Object.values(pkmMap)
+      .map((pkm) => {
+        const indicatorList = Object.values(pkm.indicators).map((ind) => ({
+          ...ind,
+          percentage:
+            ind.target > 0
+              ? Math.round((ind.realization / ind.target) * 100 * 10) / 10
+              : 0,
+          unserved: Math.max(0, ind.target - ind.realization),
+        }));
 
-      // Main metric is "JUMLAH YANG HARUS DILAYANI"
-      const mainIndicator = indicatorList.find(i => i.name === "JUMLAH YANG HARUS DILAYANI");
-      const totalTarget = mainIndicator?.target || 0;
-      const totalRealization = mainIndicator?.realization || 0;
+        // Main metric is "JUMLAH YANG HARUS DILAYANI"
+        const mainIndicator = indicatorList.find(
+          (i) => i.name === "JUMLAH YANG HARUS DILAYANI",
+        );
+        const totalTarget = mainIndicator?.target || 0;
+        const totalRealization = mainIndicator?.realization || 0;
 
-      return {
-        puskesmasCode: pkm.puskesmasCode,
-        puskesmasName: pkm.puskesmasName,
-        indicators: indicatorList,
-        totalTarget,
-        totalRealization,
-        percentage: totalTarget > 0 
-          ? Math.round((totalRealization / totalTarget) * 100 * 10) / 10 
-          : 0,
-        unserved: Math.max(0, totalTarget - totalRealization),
-      };
-    }).sort((a, b) => a.percentage - b.percentage); // Worst first
+        return {
+          puskesmasCode: pkm.puskesmasCode,
+          puskesmasName: pkm.puskesmasName,
+          indicators: indicatorList,
+          totalTarget,
+          totalRealization,
+          percentage:
+            totalTarget > 0
+              ? Math.round((totalRealization / totalTarget) * 100 * 10) / 10
+              : 0,
+          unserved: Math.max(0, totalTarget - totalRealization),
+        };
+      })
+      .sort((a, b) => a.percentage - b.percentage); // Worst first
   } catch (err) {
     console.error("getProgramDetailData error:", err);
     throw err;

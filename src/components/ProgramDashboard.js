@@ -23,9 +23,9 @@ import {
   getQuartersForYear,
   formatPeriodLabel,
 } from "@/utils/periods";
-import { 
-  isValidProgramType, 
-  getProgramLabel, 
+import {
+  isValidProgramType,
+  getProgramLabel,
   getProgram,
   PROGRAMS,
   getPartAIndicators,
@@ -52,7 +52,7 @@ export default function ProgramDashboard({ programType, title }) {
   // KEAMANAN: Validasi programType
   if (!programType || !isValidProgramType(programType)) {
     throw new Error(
-      `ProgramDashboard: programType tidak valid: "${programType}". Gunakan PROGRAM_TYPES.`
+      `ProgramDashboard: programType tidak valid: "${programType}". Gunakan PROGRAM_TYPES.`,
     );
   }
 
@@ -68,12 +68,58 @@ export default function ProgramDashboard({ programType, title }) {
   const [puskesmasMaster, setPuskesmasMaster] = useState([]);
   const [selectedPeriod, setSelectedPeriod] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortConfig, setSortConfig] = useState({ key: "percentage", direction: "desc" });
-  
+  const [sortConfig, setSortConfig] = useState({
+    key: "percentage",
+    direction: "desc",
+  });
+
+  // KEAMANAN: User & Role State
+  const [currentUser, setCurrentUser] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [userPuskesmasCode, setUserPuskesmasCode] = useState(null);
+  const [userLoaded, setUserLoaded] = useState(false); // Track if user info is loaded
+
+  // Helper: Check if user is admin based on email
+  const checkIsAdmin = (email) => {
+    const adminEmails = [
+      "kab@dinkes.go.id",
+      "admin@dinkes.go.id",
+      "admin@example.com",
+    ];
+    return adminEmails.includes(email?.toLowerCase());
+  };
+
   const periodOptions = useMemo(() => generateTriwulanOptions(), []);
 
-  // Initialize period
+  // Initialize period and fetch user session
   useEffect(() => {
+    async function initDashboard() {
+      try {
+        // Get current user session
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
+
+        if (session) {
+          setCurrentUser(session.user);
+          const adminStatus = checkIsAdmin(session.user.email);
+          setIsAdmin(adminStatus);
+
+          // Extract puskesmas code from email for non-admin users
+          if (!adminStatus) {
+            const emailCode = session.user.email.split("@")[0].toUpperCase();
+            setUserPuskesmasCode(emailCode);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching user session:", err);
+      } finally {
+        setUserLoaded(true); // Mark user info as loaded
+      }
+    }
+
+    initDashboard();
     setSelectedPeriod(getCurrentPeriod());
   }, []);
 
@@ -98,9 +144,11 @@ export default function ProgramDashboard({ programType, title }) {
   }, []);
 
   // Fetch achievements by program type and period
+  // KEAMANAN: Filter berdasarkan role user (puskesmas hanya melihat data sendiri)
   useEffect(() => {
     async function fetchData() {
-      if (!selectedPeriod) return;
+      // PENTING: Tunggu sampai user info ter-load
+      if (!selectedPeriod || !userLoaded) return;
 
       try {
         setLoadingData(true);
@@ -111,6 +159,11 @@ export default function ProgramDashboard({ programType, title }) {
           .neq("puskesmas_code", "KAB")
           .eq("program_type", programType);
 
+        // KEAMANAN: Jika user bukan admin, WAJIB filter ke puskesmas mereka sendiri
+        if (!isAdmin && userPuskesmasCode) {
+          query = query.eq("puskesmas_code", userPuskesmasCode);
+        }
+
         if (isAnnualPeriod(selectedPeriod)) {
           const parsed = parsePeriod(selectedPeriod);
           const quarters = getQuartersForYear(parsed.year);
@@ -119,7 +172,8 @@ export default function ProgramDashboard({ programType, title }) {
           query = query.eq("period", selectedPeriod);
         }
 
-        const { data: achievements, error } = await query.order("puskesmas_code");
+        const { data: achievements, error } =
+          await query.order("puskesmas_code");
 
         if (error) throw error;
         setData(achievements || []);
@@ -131,7 +185,7 @@ export default function ProgramDashboard({ programType, title }) {
     }
 
     fetchData();
-  }, [selectedPeriod, programType]);
+  }, [selectedPeriod, programType, isAdmin, userPuskesmasCode, userLoaded]);
 
   // ============================================
   // COMPUTED DATA - Sama persis seperti sebelumnya
@@ -143,11 +197,11 @@ export default function ProgramDashboard({ programType, title }) {
 
     const totalTarget = filteredData.reduce(
       (sum, d) => sum + (parseFloat(d.target_qty) || 0),
-      0
+      0,
     );
     const totalRealization = filteredData.reduce(
       (sum, d) => sum + (parseFloat(d.realization_qty) || 0),
-      0
+      0,
     );
     const totalUnserved = Math.max(0, totalTarget - totalRealization);
     const percentage =
@@ -192,13 +246,15 @@ export default function ProgramDashboard({ programType, title }) {
           };
         }
         pkmTotals[row.puskesmas_code].target += parseFloat(row.target_qty) || 0;
-        pkmTotals[row.puskesmas_code].realization += parseFloat(row.realization_qty) || 0;
+        pkmTotals[row.puskesmas_code].realization +=
+          parseFloat(row.realization_qty) || 0;
       });
 
     return Object.values(pkmTotals)
       .map((p) => {
         const pkm = puskesmasMaster.find((m) => m.code === p.code);
-        const percentage = p.target > 0 ? ((p.realization / p.target) * 100).toFixed(1) : 0;
+        const percentage =
+          p.target > 0 ? ((p.realization / p.target) * 100).toFixed(1) : 0;
         return {
           ...p,
           name: pkm?.name || p.code,
@@ -213,13 +269,20 @@ export default function ProgramDashboard({ programType, title }) {
   // ============================================
   // SECTION A: Data Layanan Dasar (Sasaran Manusia)
   // ============================================
-  const partAIndicators = useMemo(() => getPartAIndicators(programType), [programType]);
-  
+  const partAIndicators = useMemo(
+    () => getPartAIndicators(programType),
+    [programType],
+  );
+
   const sectionAData = useMemo(() => {
     const pkmTotals = {};
 
     data
-      .filter((d) => d.puskesmas_code !== "KAB" && partAIndicators.includes(d.indicator_name))
+      .filter(
+        (d) =>
+          d.puskesmas_code !== "KAB" &&
+          partAIndicators.includes(d.indicator_name),
+      )
       .forEach((row) => {
         if (!pkmTotals[row.puskesmas_code]) {
           pkmTotals[row.puskesmas_code] = {
@@ -229,13 +292,15 @@ export default function ProgramDashboard({ programType, title }) {
           };
         }
         pkmTotals[row.puskesmas_code].target += parseFloat(row.target_qty) || 0;
-        pkmTotals[row.puskesmas_code].realization += parseFloat(row.realization_qty) || 0;
+        pkmTotals[row.puskesmas_code].realization +=
+          parseFloat(row.realization_qty) || 0;
       });
 
     return Object.values(pkmTotals)
       .map((p) => {
         const pkm = puskesmasMaster.find((m) => m.code === p.code);
-        const percentage = p.target > 0 ? ((p.realization / p.target) * 100).toFixed(1) : null;
+        const percentage =
+          p.target > 0 ? ((p.realization / p.target) * 100).toFixed(1) : null;
         return {
           ...p,
           name: pkm?.name || p.code,
@@ -249,24 +314,40 @@ export default function ProgramDashboard({ programType, title }) {
 
   const sectionAStats = useMemo(() => {
     const totalTarget = sectionAData.reduce((sum, p) => sum + p.target, 0);
-    const totalRealization = sectionAData.reduce((sum, p) => sum + p.realization, 0);
+    const totalRealization = sectionAData.reduce(
+      (sum, p) => sum + p.realization,
+      0,
+    );
     const totalUnserved = sectionAData.reduce((sum, p) => sum + p.unserved, 0);
-    const percentage = totalTarget > 0 ? ((totalRealization / totalTarget) * 100).toFixed(1) : "N/A";
+    const percentage =
+      totalTarget > 0
+        ? ((totalRealization / totalTarget) * 100).toFixed(1)
+        : "N/A";
     return { totalTarget, totalRealization, totalUnserved, percentage };
   }, [sectionAData]);
 
   // ============================================
   // SECTION B: Data Mutu Layanan (Sumber Daya)
   // ============================================
-  const partBBarangIndicators = useMemo(() => getPartBBarangIndicators(programType), [programType]);
-  const partBSDMIndicators = useMemo(() => getPartBSDMIndicators(programType), [programType]);
+  const partBBarangIndicators = useMemo(
+    () => getPartBBarangIndicators(programType),
+    [programType],
+  );
+  const partBSDMIndicators = useMemo(
+    () => getPartBSDMIndicators(programType),
+    [programType],
+  );
 
   // Aggregasi per Indikator (untuk Section B - Barang)
   const sectionBBarangData = useMemo(() => {
     const indTotals = {};
 
     data
-      .filter((d) => d.puskesmas_code !== "KAB" && partBBarangIndicators.includes(d.indicator_name))
+      .filter(
+        (d) =>
+          d.puskesmas_code !== "KAB" &&
+          partBBarangIndicators.includes(d.indicator_name),
+      )
       .forEach((row) => {
         if (!indTotals[row.indicator_name]) {
           indTotals[row.indicator_name] = {
@@ -276,12 +357,16 @@ export default function ProgramDashboard({ programType, title }) {
           };
         }
         indTotals[row.indicator_name].target += parseFloat(row.target_qty) || 0;
-        indTotals[row.indicator_name].realization += parseFloat(row.realization_qty) || 0;
+        indTotals[row.indicator_name].realization +=
+          parseFloat(row.realization_qty) || 0;
       });
 
     return Object.values(indTotals)
       .map((ind) => {
-        const percentage = ind.target > 0 ? ((ind.realization / ind.target) * 100).toFixed(1) : null;
+        const percentage =
+          ind.target > 0
+            ? ((ind.realization / ind.target) * 100).toFixed(1)
+            : null;
         return {
           ...ind,
           percentage: percentage !== null ? parseFloat(percentage) : null,
@@ -297,7 +382,11 @@ export default function ProgramDashboard({ programType, title }) {
     const indTotals = {};
 
     data
-      .filter((d) => d.puskesmas_code !== "KAB" && partBSDMIndicators.includes(d.indicator_name))
+      .filter(
+        (d) =>
+          d.puskesmas_code !== "KAB" &&
+          partBSDMIndicators.includes(d.indicator_name),
+      )
       .forEach((row) => {
         if (!indTotals[row.indicator_name]) {
           indTotals[row.indicator_name] = {
@@ -307,12 +396,16 @@ export default function ProgramDashboard({ programType, title }) {
           };
         }
         indTotals[row.indicator_name].target += parseFloat(row.target_qty) || 0;
-        indTotals[row.indicator_name].realization += parseFloat(row.realization_qty) || 0;
+        indTotals[row.indicator_name].realization +=
+          parseFloat(row.realization_qty) || 0;
       });
 
     return Object.values(indTotals)
       .map((ind) => {
-        const percentage = ind.target > 0 ? ((ind.realization / ind.target) * 100).toFixed(1) : null;
+        const percentage =
+          ind.target > 0
+            ? ((ind.realization / ind.target) * 100).toFixed(1)
+            : null;
         return {
           ...ind,
           percentage: percentage !== null ? parseFloat(percentage) : null,
@@ -353,7 +446,7 @@ export default function ProgramDashboard({ programType, title }) {
       filtered = filtered.filter(
         (p) =>
           p.name.toLowerCase().includes(query) ||
-          p.code.toLowerCase().includes(query)
+          p.code.toLowerCase().includes(query),
       );
     }
 
@@ -362,8 +455,8 @@ export default function ProgramDashboard({ programType, title }) {
       const aVal = a[sortConfig.key] ?? 0;
       const bVal = b[sortConfig.key] ?? 0;
       if (sortConfig.key === "name" || sortConfig.key === "code") {
-        return sortConfig.direction === "asc" 
-          ? String(aVal).localeCompare(String(bVal), "id") 
+        return sortConfig.direction === "asc"
+          ? String(aVal).localeCompare(String(bVal), "id")
           : String(bVal).localeCompare(String(aVal), "id");
       }
       return sortConfig.direction === "asc" ? aVal - bVal : bVal - aVal;
@@ -372,11 +465,16 @@ export default function ProgramDashboard({ programType, title }) {
 
   // Color scale function for cells
   const getScoreColor = (percentage) => {
-    if (percentage === null) return { bg: "bg-gray-100", text: "text-gray-500", bar: "#9ca3af" };
-    if (percentage >= 100) return { bg: "bg-emerald-100", text: "text-emerald-800", bar: "#10b981" };
-    if (percentage >= 80) return { bg: "bg-emerald-50", text: "text-emerald-700", bar: "#34d399" };
-    if (percentage >= 50) return { bg: "bg-amber-100", text: "text-amber-800", bar: "#f59e0b" };
-    if (percentage > 0) return { bg: "bg-red-100", text: "text-red-800", bar: "#ef4444" };
+    if (percentage === null)
+      return { bg: "bg-gray-100", text: "text-gray-500", bar: "#9ca3af" };
+    if (percentage >= 100)
+      return { bg: "bg-emerald-100", text: "text-emerald-800", bar: "#10b981" };
+    if (percentage >= 80)
+      return { bg: "bg-emerald-50", text: "text-emerald-700", bar: "#34d399" };
+    if (percentage >= 50)
+      return { bg: "bg-amber-100", text: "text-amber-800", bar: "#f59e0b" };
+    if (percentage > 0)
+      return { bg: "bg-red-100", text: "text-red-800", bar: "#ef4444" };
     return { bg: "bg-gray-100", text: "text-gray-500", bar: "#9ca3af" };
   };
 
@@ -393,7 +491,10 @@ export default function ProgramDashboard({ programType, title }) {
   };
 
   // Period Label
-  const periodLabel = useMemo(() => formatPeriodLabel(selectedPeriod), [selectedPeriod]);
+  const periodLabel = useMemo(
+    () => formatPeriodLabel(selectedPeriod),
+    [selectedPeriod],
+  );
 
   // ============================================
   // TOOLTIP COMPONENTS
@@ -406,10 +507,14 @@ export default function ProgramDashboard({ programType, title }) {
         <div className="bg-white p-3 rounded-lg shadow-lg border border-gray-200 text-sm">
           <p className="font-semibold text-gray-800">{d.name}</p>
           <p className="text-gray-600">
-            Jumlah: <span className="font-medium">{d.value.toLocaleString("id-ID")}</span>
+            Jumlah:{" "}
+            <span className="font-medium">
+              {d.value.toLocaleString("id-ID")}
+            </span>
           </p>
           <p className="text-gray-600">
-            Persentase: <span className="font-medium">
+            Persentase:{" "}
+            <span className="font-medium">
               {((d.value / (summaryStats.totalTarget || 1)) * 100).toFixed(1)}%
             </span>
           </p>
@@ -447,7 +552,10 @@ export default function ProgramDashboard({ programType, title }) {
               <div className="h-4 bg-gray-100 rounded w-96 mb-6"></div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                 {[...Array(3)].map((_, i) => (
-                  <div key={i} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                  <div
+                    key={i}
+                    className="bg-white p-6 rounded-xl shadow-sm border border-gray-100"
+                  >
                     <div className="h-4 bg-gray-100 rounded w-24 mb-3"></div>
                     <div className="h-8 bg-gray-200 rounded w-32"></div>
                   </div>
@@ -479,16 +587,34 @@ export default function ProgramDashboard({ programType, title }) {
             <div>
               <div className="flex items-center gap-3">
                 <span className="text-3xl">{programConfig.icon}</span>
-                <h1 className="text-2xl font-bold text-gray-800">{dashboardTitle}</h1>
+                <h1 className="text-2xl font-bold text-gray-800">
+                  {dashboardTitle}
+                </h1>
               </div>
               <p className="text-gray-500 mt-1 ml-12">
                 Laporan Kinerja Periode:{" "}
-                <span className={`font-semibold ${theme.text}`}>{periodLabel}</span>
+                <span className={`font-semibold ${theme.text}`}>
+                  {periodLabel}
+                </span>
               </p>
+              {/* KEAMANAN: Tampilkan info puskesmas untuk non-admin */}
+              {!isAdmin && userPuskesmasCode && (
+                <p className="text-sm text-blue-600 mt-1 ml-12 bg-blue-50 inline-block px-3 py-1 rounded-full">
+                  📍 Data Puskesmas:{" "}
+                  <span className="font-bold">{userPuskesmasCode}</span>
+                </p>
+              )}
+              {isAdmin && (
+                <p className="text-sm text-emerald-600 mt-1 ml-12 bg-emerald-50 inline-block px-3 py-1 rounded-full">
+                  👑 Mode Admin: Melihat semua puskesmas
+                </p>
+              )}
             </div>
 
             <div className="flex items-center gap-3">
-              <label className="text-sm text-gray-600 font-medium">Periode:</label>
+              <label className="text-sm text-gray-600 font-medium">
+                Periode:
+              </label>
               <select
                 value={selectedPeriod}
                 onChange={(e) => setSelectedPeriod(e.target.value)}
@@ -501,21 +627,38 @@ export default function ProgramDashboard({ programType, title }) {
                 ))}
               </select>
               {loadingData && (
-                <div className={`animate-spin rounded-full h-5 w-5 border-b-2`} style={{ borderColor: theme.primary }}></div>
+                <div
+                  className={`animate-spin rounded-full h-5 w-5 border-b-2`}
+                  style={{ borderColor: theme.primary }}
+                ></div>
               )}
             </div>
           </div>
 
           {/* Annual Period Indicator */}
           {isAnnualPeriod(selectedPeriod) && (
-            <div className={`mb-6 ${theme.bgLighter} border ${theme.border} rounded-xl p-4 flex items-center gap-3`}>
-              <svg className={`w-6 h-6 ${theme.text}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            <div
+              className={`mb-6 ${theme.bgLighter} border ${theme.border} rounded-xl p-4 flex items-center gap-3`}
+            >
+              <svg
+                className={`w-6 h-6 ${theme.text}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                />
               </svg>
               <div>
-                <p className={`font-semibold ${theme.textDark}`}>Mode Rekap Tahunan</p>
+                <p className={`font-semibold ${theme.textDark}`}>
+                  Mode Rekap Tahunan
+                </p>
                 <p className={`text-sm ${theme.text}`}>
-                  Menampilkan akumulasi data dari seluruh Triwulan
+                  Menampilkan akumulasi data dari seluruh periode bulan
                 </p>
               </div>
             </div>
@@ -524,14 +667,28 @@ export default function ProgramDashboard({ programType, title }) {
           {/* No Data Warning */}
           {!loadingData && data.length === 0 && (
             <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-6 text-center">
-              <svg className="w-12 h-12 text-amber-500 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+              <svg
+                className="w-12 h-12 text-amber-500 mx-auto mb-3"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
+                />
               </svg>
-              <h2 className="text-lg font-semibold text-amber-800">Belum Ada Data</h2>
+              <h2 className="text-lg font-semibold text-amber-800">
+                Belum Ada Data
+              </h2>
               <p className="text-amber-700 mt-2">
-                Data untuk program <strong>{programConfig.label}</strong> pada periode ini belum tersedia.
+                Data untuk program <strong>{programConfig.label}</strong> pada
+                periode ini belum tersedia.
                 <br />
-                Silakan input data melalui menu <strong>Input / Edit Data</strong>.
+                Silakan input data melalui menu{" "}
+                <strong>Input / Edit Data</strong>.
               </p>
             </div>
           )}
@@ -544,15 +701,29 @@ export default function ProgramDashboard({ programType, title }) {
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Sasaran</p>
+                  <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">
+                    Total Sasaran
+                  </p>
                   <p className="text-3xl font-bold text-slate-700 mt-2">
                     {summaryStats.totalTarget.toLocaleString("id-ID")}
                   </p>
-                  <p className="text-xs text-gray-400 mt-1">Target Pelayanan SPM</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Target Pelayanan SPM
+                  </p>
                 </div>
                 <div className="w-14 h-14 bg-slate-100 rounded-xl flex items-center justify-center">
-                  <svg className="w-7 h-7 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  <svg
+                    className="w-7 h-7 text-slate-600"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                    />
                   </svg>
                 </div>
               </div>
@@ -562,15 +733,34 @@ export default function ProgramDashboard({ programType, title }) {
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Terlayani</p>
-                  <p className={`text-3xl font-bold mt-2`} style={{ color: theme.primary }}>
+                  <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">
+                    Total Terlayani
+                  </p>
+                  <p
+                    className={`text-3xl font-bold mt-2`}
+                    style={{ color: theme.primary }}
+                  >
                     {summaryStats.totalRealization.toLocaleString("id-ID")}
                   </p>
-                  <p className="text-xs text-gray-400 mt-1">Sudah Mendapat Pelayanan</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Sudah Mendapat Pelayanan
+                  </p>
                 </div>
-                <div className={`w-14 h-14 ${theme.bgLight} rounded-xl flex items-center justify-center`}>
-                  <svg className={`w-7 h-7 ${theme.text}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <div
+                  className={`w-14 h-14 ${theme.bgLight} rounded-xl flex items-center justify-center`}
+                >
+                  <svg
+                    className={`w-7 h-7 ${theme.text}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
                   </svg>
                 </div>
               </div>
@@ -580,23 +770,42 @@ export default function ProgramDashboard({ programType, title }) {
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Rata-rata Capaian</p>
-                  <p className={`text-3xl font-bold mt-2 ${summaryStats.percentage >= 100 ? "text-emerald-600" : "text-amber-600"}`}>
+                  <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">
+                    Rata-rata Capaian
+                  </p>
+                  <p
+                    className={`text-3xl font-bold mt-2 ${summaryStats.percentage >= 100 ? "text-emerald-600" : "text-amber-600"}`}
+                  >
                     {summaryStats.percentage}%
                   </p>
                   <div className="mt-2 w-full bg-gray-100 rounded-full h-2">
                     <div
                       className={`h-2 rounded-full transition-all duration-500`}
-                      style={{ 
+                      style={{
                         width: `${Math.min(summaryStats.percentage, 100)}%`,
-                        backgroundColor: summaryStats.percentage >= 100 ? COLORS.emerald : theme.primary
+                        backgroundColor:
+                          summaryStats.percentage >= 100
+                            ? COLORS.emerald
+                            : theme.primary,
                       }}
                     ></div>
                   </div>
                 </div>
-                <div className={`w-14 h-14 ${summaryStats.percentage >= 100 ? "bg-emerald-100" : theme.bgLight} rounded-xl flex items-center justify-center`}>
-                  <svg className={`w-7 h-7 ${summaryStats.percentage >= 100 ? "text-emerald-600" : theme.text}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                <div
+                  className={`w-14 h-14 ${summaryStats.percentage >= 100 ? "bg-emerald-100" : theme.bgLight} rounded-xl flex items-center justify-center`}
+                >
+                  <svg
+                    className={`w-7 h-7 ${summaryStats.percentage >= 100 ? "text-emerald-600" : theme.text}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+                    />
                   </svg>
                 </div>
               </div>
@@ -609,8 +818,12 @@ export default function ProgramDashboard({ programType, title }) {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             {/* Pie Chart */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4">Distribusi Pelayanan</h2>
-              <p className="text-sm text-gray-500 mb-4">Perbandingan jumlah yang sudah dan belum terlayani</p>
+              <h2 className="text-lg font-semibold text-gray-800 mb-4">
+                Distribusi Pelayanan
+              </h2>
+              <p className="text-sm text-gray-500 mb-4">
+                Perbandingan jumlah yang sudah dan belum terlayani
+              </p>
               <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -622,7 +835,9 @@ export default function ProgramDashboard({ programType, title }) {
                       outerRadius={100}
                       paddingAngle={3}
                       dataKey="value"
-                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
+                      label={({ name, percent }) =>
+                        `${name}: ${(percent * 100).toFixed(1)}%`
+                      }
                       labelLine={false}
                     >
                       {pieChartData.map((entry, index) => (
@@ -636,15 +851,24 @@ export default function ProgramDashboard({ programType, title }) {
               </div>
               <div className="flex justify-center gap-6 mt-2 pt-4 border-t border-gray-100">
                 <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: theme.chartPrimary }}></div>
+                  <div
+                    className="w-4 h-4 rounded-full"
+                    style={{ backgroundColor: theme.chartPrimary }}
+                  ></div>
                   <span className="text-sm text-gray-600">
-                    Terlayani: <span className="font-semibold">{summaryStats.totalRealization.toLocaleString("id-ID")}</span>
+                    Terlayani:{" "}
+                    <span className="font-semibold">
+                      {summaryStats.totalRealization.toLocaleString("id-ID")}
+                    </span>
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-4 h-4 rounded-full bg-slate-400"></div>
                   <span className="text-sm text-gray-600">
-                    Belum: <span className="font-semibold">{summaryStats.totalUnserved.toLocaleString("id-ID")}</span>
+                    Belum:{" "}
+                    <span className="font-semibold">
+                      {summaryStats.totalUnserved.toLocaleString("id-ID")}
+                    </span>
                   </span>
                 </div>
               </div>
@@ -652,8 +876,12 @@ export default function ProgramDashboard({ programType, title }) {
 
             {/* Bar Chart - Top 5 Puskesmas */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4">Top 5 Puskesmas</h2>
-              <p className="text-sm text-gray-500 mb-4">Puskesmas dengan persentase capaian tertinggi</p>
+              <h2 className="text-lg font-semibold text-gray-800 mb-4">
+                Top 5 Puskesmas
+              </h2>
+              <p className="text-sm text-gray-500 mb-4">
+                Puskesmas dengan persentase capaian tertinggi
+              </p>
               <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
@@ -661,30 +889,72 @@ export default function ProgramDashboard({ programType, title }) {
                     layout="vertical"
                     margin={{ top: 10, right: 30, left: 60, bottom: 10 }}
                   >
-                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e5e7eb" />
-                    <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: "#6b7280" }} tickFormatter={(v) => `${v}%`} />
-                    <YAxis type="category" dataKey="code" tick={{ fontSize: 11, fill: "#6b7280" }} width={50} />
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      horizontal={true}
+                      vertical={false}
+                      stroke="#e5e7eb"
+                    />
+                    <XAxis
+                      type="number"
+                      domain={[0, 100]}
+                      tick={{ fontSize: 11, fill: "#6b7280" }}
+                      tickFormatter={(v) => `${v}%`}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="code"
+                      tick={{ fontSize: 11, fill: "#6b7280" }}
+                      width={50}
+                    />
                     <Tooltip content={<BarTooltip />} />
-                    <Bar dataKey="percentage" fill={theme.chartPrimary} radius={[0, 4, 4, 0]} maxBarSize={30} name="Capaian" />
+                    <Bar
+                      dataKey="percentage"
+                      fill={theme.chartPrimary}
+                      radius={[0, 4, 4, 0]}
+                      maxBarSize={30}
+                      name="Capaian"
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
               {top5Puskesmas.length > 0 && (
                 <div className="mt-4 pt-4 border-t border-gray-100">
-                  <div className={`flex items-center justify-between ${theme.bgLighter} rounded-lg p-3`}>
+                  <div
+                    className={`flex items-center justify-between ${theme.bgLighter} rounded-lg p-3`}
+                  >
                     <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 ${theme.bg} rounded-full flex items-center justify-center`}>
-                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                      <div
+                        className={`w-10 h-10 ${theme.bg} rounded-full flex items-center justify-center`}
+                      >
+                        <svg
+                          className="w-5 h-5 text-white"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+                          />
                         </svg>
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-gray-800">Top Performer</p>
-                        <p className="text-xs text-gray-600">{top5Puskesmas[0]?.name}</p>
+                        <p className="text-sm font-semibold text-gray-800">
+                          Top Performer
+                        </p>
+                        <p className="text-xs text-gray-600">
+                          {top5Puskesmas[0]?.name}
+                        </p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className={`text-2xl font-bold`} style={{ color: theme.primary }}>
+                      <p
+                        className={`text-2xl font-bold`}
+                        style={{ color: theme.primary }}
+                      >
                         {top5Puskesmas[0]?.percentage}%
                       </p>
                       <p className="text-xs text-gray-500">Capaian</p>
@@ -712,33 +982,56 @@ export default function ProgramDashboard({ programType, title }) {
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-3xl font-bold">{sectionAStats.percentage === "N/A" ? "N/A" : `${sectionAStats.percentage}%`}</p>
+                    <p className="text-3xl font-bold">
+                      {sectionAStats.percentage === "N/A"
+                        ? "N/A"
+                        : `${sectionAStats.percentage}%`}
+                    </p>
                     <p className="text-white/80 text-sm">Capaian Layanan</p>
                   </div>
                 </div>
               </div>
 
               {/* Highlight Card */}
-              <div className={`px-6 py-4 ${theme.bgLighter} border-b ${theme.border}`}>
+              <div
+                className={`px-6 py-4 ${theme.bgLighter} border-b ${theme.border}`}
+              >
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="bg-white rounded-lg p-4 shadow-sm">
-                    <p className="text-xs text-gray-500 uppercase font-medium">Sasaran Penduduk</p>
-                    <p className="text-2xl font-bold text-gray-800 mt-1">{sectionAStats.totalTarget.toLocaleString("id-ID")}</p>
+                    <p className="text-xs text-gray-500 uppercase font-medium">
+                      Sasaran Penduduk
+                    </p>
+                    <p className="text-2xl font-bold text-gray-800 mt-1">
+                      {sectionAStats.totalTarget.toLocaleString("id-ID")}
+                    </p>
                   </div>
                   <div className="bg-white rounded-lg p-4 shadow-sm">
-                    <p className="text-xs text-gray-500 uppercase font-medium">Warga Terlayani</p>
-                    <p className="text-2xl font-bold text-emerald-600 mt-1">{sectionAStats.totalRealization.toLocaleString("id-ID")}</p>
+                    <p className="text-xs text-gray-500 uppercase font-medium">
+                      Warga Terlayani
+                    </p>
+                    <p className="text-2xl font-bold text-emerald-600 mt-1">
+                      {sectionAStats.totalRealization.toLocaleString("id-ID")}
+                    </p>
                   </div>
                   <div className="bg-white rounded-lg p-4 shadow-sm border-l-4 border-red-500">
-                    <p className="text-xs text-gray-500 uppercase font-medium">Warga Belum Terlayani</p>
-                    <p className={`text-2xl font-bold mt-1 ${sectionAStats.totalUnserved > 0 ? "text-red-600" : "text-emerald-600"}`}>
+                    <p className="text-xs text-gray-500 uppercase font-medium">
+                      Warga Belum Terlayani
+                    </p>
+                    <p
+                      className={`text-2xl font-bold mt-1 ${sectionAStats.totalUnserved > 0 ? "text-red-600" : "text-emerald-600"}`}
+                    >
                       {sectionAStats.totalUnserved.toLocaleString("id-ID")}
                     </p>
                   </div>
                   <div className="bg-white rounded-lg p-4 shadow-sm">
-                    <p className="text-xs text-gray-500 uppercase font-medium">Puskesmas Tuntas</p>
+                    <p className="text-xs text-gray-500 uppercase font-medium">
+                      Puskesmas Tuntas
+                    </p>
                     <p className="text-2xl font-bold text-blue-600 mt-1">
-                      {sectionAData.filter(p => p.isTuntas).length} <span className="text-sm text-gray-400">/ {sectionAData.length}</span>
+                      {sectionAData.filter((p) => p.isTuntas).length}{" "}
+                      <span className="text-sm text-gray-400">
+                        / {sectionAData.length}
+                      </span>
                     </p>
                   </div>
                 </div>
@@ -749,19 +1042,34 @@ export default function ProgramDashboard({ programType, title }) {
                 <table className="w-full">
                   <thead className="sticky top-0 z-10">
                     <tr style={{ backgroundColor: theme.primary }}>
-                      <th className="px-4 py-3 text-center text-sm font-semibold text-white w-12">No</th>
-                      <th className="px-4 py-3 text-left text-sm font-semibold text-white">Puskesmas</th>
-                      <th className="px-4 py-3 text-center text-sm font-semibold text-white">Sasaran (Target)</th>
-                      <th className="px-4 py-3 text-center text-sm font-semibold text-white">Terlayani (Realisasi)</th>
-                      <th className="px-4 py-3 text-center text-sm font-semibold text-white">Belum Terlayani (Gap)</th>
-                      <th className="px-4 py-3 text-center text-sm font-semibold text-white">% Capaian</th>
-                      <th className="px-4 py-3 text-center text-sm font-semibold text-white">Status</th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold text-white w-12">
+                        No
+                      </th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-white">
+                        Puskesmas
+                      </th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold text-white">
+                        Sasaran (Target)
+                      </th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold text-white">
+                        Terlayani (Realisasi)
+                      </th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold text-white">
+                        Belum Terlayani (Gap)
+                      </th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold text-white">
+                        % Capaian
+                      </th>
+                      <th className="px-4 py-3 text-center text-sm font-semibold text-white">
+                        Status
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {sectionAData.map((pkm, idx) => {
                       const scoreColor = getScoreColor(pkm.percentage);
-                      const isLowPerformer = pkm.percentage !== null && pkm.percentage < 50;
+                      const isLowPerformer =
+                        pkm.percentage !== null && pkm.percentage < 50;
                       return (
                         <tr
                           key={pkm.code}
@@ -772,32 +1080,53 @@ export default function ProgramDashboard({ programType, title }) {
                             hover:bg-blue-50
                           `}
                         >
-                          <td className="px-4 py-3 text-center text-sm text-gray-600 font-medium">{idx + 1}</td>
+                          <td className="px-4 py-3 text-center text-sm text-gray-600 font-medium">
+                            {idx + 1}
+                          </td>
                           <td className="px-4 py-3">
-                            <p className="text-sm font-semibold text-gray-800">{pkm.name}</p>
+                            <p className="text-sm font-semibold text-gray-800">
+                              {pkm.name}
+                            </p>
                             <p className="text-xs text-gray-500">{pkm.code}</p>
                           </td>
                           <td className="px-4 py-3 text-center text-sm text-gray-800 font-semibold tabular-nums">
                             {pkm.target.toLocaleString("id-ID")}
                           </td>
-                          <td className="px-4 py-3 text-center text-sm font-semibold tabular-nums" style={{ color: theme.primary }}>
+                          <td
+                            className="px-4 py-3 text-center text-sm font-semibold tabular-nums"
+                            style={{ color: theme.primary }}
+                          >
                             {pkm.realization.toLocaleString("id-ID")}
                           </td>
-                          <td className={`px-4 py-3 text-center text-sm font-semibold tabular-nums ${pkm.unserved > 0 ? "text-red-600" : "text-emerald-600"}`}>
-                            {pkm.unserved > 0 ? `-${pkm.unserved.toLocaleString("id-ID")}` : "0"}
+                          <td
+                            className={`px-4 py-3 text-center text-sm font-semibold tabular-nums ${pkm.unserved > 0 ? "text-red-600" : "text-emerald-600"}`}
+                          >
+                            {pkm.unserved > 0
+                              ? `-${pkm.unserved.toLocaleString("id-ID")}`
+                              : "0"}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className={`inline-block px-3 py-1 rounded-lg font-bold text-sm ${scoreColor.bg} ${scoreColor.text}`}>
-                              {pkm.percentage !== null ? `${pkm.percentage}%` : "N/A"}
+                            <span
+                              className={`inline-block px-3 py-1 rounded-lg font-bold text-sm ${scoreColor.bg} ${scoreColor.text}`}
+                            >
+                              {pkm.percentage !== null
+                                ? `${pkm.percentage}%`
+                                : "N/A"}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
                             {pkm.percentage === null ? (
-                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-600">— N/A</span>
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-600">
+                                — N/A
+                              </span>
                             ) : pkm.isTuntas ? (
-                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">✓ TUNTAS</span>
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
+                                ✓ TUNTAS
+                              </span>
                             ) : (
-                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800">✗ BELUM</span>
+                              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800">
+                                ✗ BELUM
+                              </span>
                             )}
                           </td>
                         </tr>
@@ -827,9 +1156,12 @@ export default function ProgramDashboard({ programType, title }) {
                   </div>
                   <div className="text-right">
                     <p className="text-2xl font-bold text-slate-800">
-                      {sectionBStats.completedIndicators} / {sectionBStats.totalIndicators}
+                      {sectionBStats.completedIndicators} /{" "}
+                      {sectionBStats.totalIndicators}
                     </p>
-                    <p className="text-slate-600 text-sm">Indikator Terpenuhi</p>
+                    <p className="text-slate-600 text-sm">
+                      Indikator Terpenuhi
+                    </p>
                   </div>
                 </div>
               </div>
@@ -846,19 +1178,34 @@ export default function ProgramDashboard({ programType, title }) {
                     <table className="w-full">
                       <thead>
                         <tr className="bg-slate-200">
-                          <th className="px-4 py-3 text-center text-sm font-semibold text-slate-700 w-12">No</th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">Indikator</th>
-                          <th className="px-4 py-3 text-center text-sm font-semibold text-slate-700">Kebutuhan (Target)</th>
-                          <th className="px-4 py-3 text-center text-sm font-semibold text-slate-700">Tersedia (Realisasi)</th>
-                          <th className="px-4 py-3 text-center text-sm font-semibold text-slate-700">Kekurangan (Gap)</th>
-                          <th className="px-4 py-3 text-center text-sm font-semibold text-slate-700 min-w-[200px]">% Ketersediaan</th>
-                          <th className="px-4 py-3 text-center text-sm font-semibold text-slate-700">Status</th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold text-slate-700 w-12">
+                            No
+                          </th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">
+                            Indikator
+                          </th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold text-slate-700">
+                            Kebutuhan (Target)
+                          </th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold text-slate-700">
+                            Tersedia (Realisasi)
+                          </th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold text-slate-700">
+                            Kekurangan (Gap)
+                          </th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold text-slate-700 min-w-[200px]">
+                            % Ketersediaan
+                          </th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold text-slate-700">
+                            Status
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
                         {sectionBBarangData.map((ind, idx) => {
                           const scoreColor = getScoreColor(ind.percentage);
-                          const isLow = ind.percentage !== null && ind.percentage < 50;
+                          const isLow =
+                            ind.percentage !== null && ind.percentage < 50;
                           return (
                             <tr
                               key={ind.indicator}
@@ -869,16 +1216,24 @@ export default function ProgramDashboard({ programType, title }) {
                                 hover:bg-blue-50
                               `}
                             >
-                              <td className="px-4 py-3 text-center text-sm text-gray-600 font-medium">{idx + 1}</td>
-                              <td className="px-4 py-3 text-sm text-gray-800 font-medium">{ind.indicator}</td>
+                              <td className="px-4 py-3 text-center text-sm text-gray-600 font-medium">
+                                {idx + 1}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-800 font-medium">
+                                {ind.indicator}
+                              </td>
                               <td className="px-4 py-3 text-center text-sm text-gray-800 font-semibold tabular-nums">
                                 {ind.target.toLocaleString("id-ID")}
                               </td>
                               <td className="px-4 py-3 text-center text-sm font-semibold tabular-nums text-emerald-600">
                                 {ind.realization.toLocaleString("id-ID")}
                               </td>
-                              <td className={`px-4 py-3 text-center text-sm font-semibold tabular-nums ${ind.gap > 0 ? "text-red-600" : "text-emerald-600"}`}>
-                                {ind.gap > 0 ? `-${ind.gap.toLocaleString("id-ID")}` : "0"}
+                              <td
+                                className={`px-4 py-3 text-center text-sm font-semibold tabular-nums ${ind.gap > 0 ? "text-red-600" : "text-emerald-600"}`}
+                              >
+                                {ind.gap > 0
+                                  ? `-${ind.gap.toLocaleString("id-ID")}`
+                                  : "0"}
                               </td>
                               <td className="px-4 py-3">
                                 <div className="flex items-center gap-3">
@@ -887,22 +1242,33 @@ export default function ProgramDashboard({ programType, title }) {
                                       className={`h-full rounded-full transition-all duration-500`}
                                       style={{
                                         width: `${Math.min(ind.percentage ?? 0, 100)}%`,
-                                        backgroundColor: scoreColor.bar || theme.chartPrimary,
+                                        backgroundColor:
+                                          scoreColor.bar || theme.chartPrimary,
                                       }}
                                     ></div>
                                   </div>
-                                  <span className={`text-sm font-bold tabular-nums w-14 text-right ${scoreColor.text}`}>
-                                    {ind.percentage !== null ? `${ind.percentage}%` : "N/A"}
+                                  <span
+                                    className={`text-sm font-bold tabular-nums w-14 text-right ${scoreColor.text}`}
+                                  >
+                                    {ind.percentage !== null
+                                      ? `${ind.percentage}%`
+                                      : "N/A"}
                                   </span>
                                 </div>
                               </td>
                               <td className="px-4 py-3 text-center">
                                 {ind.percentage === null ? (
-                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-600">— N/A</span>
+                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-600">
+                                    — N/A
+                                  </span>
                                 ) : ind.isTuntas ? (
-                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">✓ CUKUP</span>
+                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
+                                    ✓ CUKUP
+                                  </span>
                                 ) : (
-                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800">✗ KURANG</span>
+                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800">
+                                    ✗ KURANG
+                                  </span>
                                 )}
                               </td>
                             </tr>
@@ -926,19 +1292,34 @@ export default function ProgramDashboard({ programType, title }) {
                     <table className="w-full">
                       <thead>
                         <tr className="bg-slate-200">
-                          <th className="px-4 py-3 text-center text-sm font-semibold text-slate-700 w-12">No</th>
-                          <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">Jenis Tenaga</th>
-                          <th className="px-4 py-3 text-center text-sm font-semibold text-slate-700">Kebutuhan (Target)</th>
-                          <th className="px-4 py-3 text-center text-sm font-semibold text-slate-700">Tersedia (Realisasi)</th>
-                          <th className="px-4 py-3 text-center text-sm font-semibold text-slate-700">Kekurangan (Gap)</th>
-                          <th className="px-4 py-3 text-center text-sm font-semibold text-slate-700 min-w-[200px]">% Ketersediaan</th>
-                          <th className="px-4 py-3 text-center text-sm font-semibold text-slate-700">Status</th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold text-slate-700 w-12">
+                            No
+                          </th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold text-slate-700">
+                            Jenis Tenaga
+                          </th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold text-slate-700">
+                            Kebutuhan (Target)
+                          </th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold text-slate-700">
+                            Tersedia (Realisasi)
+                          </th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold text-slate-700">
+                            Kekurangan (Gap)
+                          </th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold text-slate-700 min-w-[200px]">
+                            % Ketersediaan
+                          </th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold text-slate-700">
+                            Status
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
                         {sectionBSDMData.map((ind, idx) => {
                           const scoreColor = getScoreColor(ind.percentage);
-                          const isLow = ind.percentage !== null && ind.percentage < 50;
+                          const isLow =
+                            ind.percentage !== null && ind.percentage < 50;
                           return (
                             <tr
                               key={ind.indicator}
@@ -949,16 +1330,24 @@ export default function ProgramDashboard({ programType, title }) {
                                 hover:bg-blue-50
                               `}
                             >
-                              <td className="px-4 py-3 text-center text-sm text-gray-600 font-medium">{idx + 1}</td>
-                              <td className="px-4 py-3 text-sm text-gray-800 font-medium">{ind.indicator}</td>
+                              <td className="px-4 py-3 text-center text-sm text-gray-600 font-medium">
+                                {idx + 1}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-800 font-medium">
+                                {ind.indicator}
+                              </td>
                               <td className="px-4 py-3 text-center text-sm text-gray-800 font-semibold tabular-nums">
                                 {ind.target.toLocaleString("id-ID")}
                               </td>
                               <td className="px-4 py-3 text-center text-sm font-semibold tabular-nums text-emerald-600">
                                 {ind.realization.toLocaleString("id-ID")}
                               </td>
-                              <td className={`px-4 py-3 text-center text-sm font-semibold tabular-nums ${ind.gap > 0 ? "text-red-600" : "text-emerald-600"}`}>
-                                {ind.gap > 0 ? `-${ind.gap.toLocaleString("id-ID")}` : "0"}
+                              <td
+                                className={`px-4 py-3 text-center text-sm font-semibold tabular-nums ${ind.gap > 0 ? "text-red-600" : "text-emerald-600"}`}
+                              >
+                                {ind.gap > 0
+                                  ? `-${ind.gap.toLocaleString("id-ID")}`
+                                  : "0"}
                               </td>
                               <td className="px-4 py-3">
                                 <div className="flex items-center gap-3">
@@ -967,22 +1356,33 @@ export default function ProgramDashboard({ programType, title }) {
                                       className={`h-full rounded-full transition-all duration-500`}
                                       style={{
                                         width: `${Math.min(ind.percentage ?? 0, 100)}%`,
-                                        backgroundColor: scoreColor.bar || theme.chartPrimary,
+                                        backgroundColor:
+                                          scoreColor.bar || theme.chartPrimary,
                                       }}
                                     ></div>
                                   </div>
-                                  <span className={`text-sm font-bold tabular-nums w-14 text-right ${scoreColor.text}`}>
-                                    {ind.percentage !== null ? `${ind.percentage}%` : "N/A"}
+                                  <span
+                                    className={`text-sm font-bold tabular-nums w-14 text-right ${scoreColor.text}`}
+                                  >
+                                    {ind.percentage !== null
+                                      ? `${ind.percentage}%`
+                                      : "N/A"}
                                   </span>
                                 </div>
                               </td>
                               <td className="px-4 py-3 text-center">
                                 {ind.percentage === null ? (
-                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-600">— N/A</span>
+                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-600">
+                                    — N/A
+                                  </span>
                                 ) : ind.isTuntas ? (
-                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">✓ CUKUP</span>
+                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
+                                    ✓ CUKUP
+                                  </span>
                                 ) : (
-                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800">✗ KURANG</span>
+                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800">
+                                    ✗ KURANG
+                                  </span>
                                 )}
                               </td>
                             </tr>
@@ -998,15 +1398,26 @@ export default function ProgramDashboard({ programType, title }) {
               <div className="px-6 py-4 bg-slate-50 border-t border-slate-200">
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-slate-600">
-                    💡 Klik indikator di atas untuk melihat rincian per Puskesmas
+                    💡 Klik indikator di atas untuk melihat rincian per
+                    Puskesmas
                   </p>
                   <a
                     href={`/indikator?program=${programType}`}
                     className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${theme.bg} text-white hover:opacity-90 transition-opacity`}
                   >
                     🔬 Analisa Detail Per Indikator
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5l7 7-7 7"
+                      />
                     </svg>
                   </a>
                 </div>
@@ -1016,7 +1427,8 @@ export default function ProgramDashboard({ programType, title }) {
 
           {/* Footer */}
           <div className="mt-6 text-center text-xs text-gray-400">
-            Data diperbarui secara realtime dari Supabase • Dinas Kesehatan Kab. Morowali Utara
+            Data diperbarui secara realtime dari Supabase • Dinas Kesehatan Kab.
+            Morowali Utara
           </div>
         </div>
       </div>

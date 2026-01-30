@@ -10,13 +10,13 @@ import {
   getCurrentPeriod,
   formatPeriodLabel,
 } from "@/utils/periods";
-import { 
-  PROGRAM_TYPES, 
-  PROGRAM_TYPES_LIST, 
-  isValidProgramType, 
+import {
+  PROGRAM_TYPES,
+  PROGRAM_TYPES_LIST,
+  isValidProgramType,
   getProgramLabel,
   getIndicatorsForProgram,
-  getProgram
+  getProgram,
 } from "@/utils/constants";
 
 export default function InputDataPage() {
@@ -169,7 +169,12 @@ export default function InputDataPage() {
   // Load existing data when puskesmas, period, or programType changes
   useEffect(() => {
     async function loadExistingData() {
-      if (!selectedPuskesmas || !selectedPeriod || !selectedProgramType || indicators.length === 0)
+      if (
+        !selectedPuskesmas ||
+        !selectedPeriod ||
+        !selectedProgramType ||
+        indicators.length === 0
+      )
         return;
 
       // KEAMANAN: Validasi programType sebelum query
@@ -241,13 +246,31 @@ export default function InputDataPage() {
 
     // KEAMANAN: Validasi ulang programType
     if (!isValidProgramType(selectedProgramType)) {
-      showToast(`Program type tidak valid: ${selectedProgramType}. Gunakan dropdown yang tersedia.`, "error");
+      showToast(
+        `Program type tidak valid: ${selectedProgramType}. Gunakan dropdown yang tersedia.`,
+        "error",
+      );
       return;
     }
 
     if (!selectedPuskesmas || !selectedPeriod) {
       showToast("Pilih Puskesmas dan Periode terlebih dahulu", "error");
       return;
+    }
+
+    // KEAMANAN: Validasi puskesmas untuk non-admin
+    // Non-admin hanya boleh input data untuk puskesmas sendiri
+    let targetPuskesmasCode = selectedPuskesmas;
+    if (!isAdmin && currentUser) {
+      const userPuskesmasCode = currentUser.email.split("@")[0].toUpperCase();
+      if (selectedPuskesmas !== userPuskesmasCode) {
+        showToast(
+          "Anda hanya dapat menginput data untuk Puskesmas Anda sendiri!",
+          "error",
+        );
+        return;
+      }
+      targetPuskesmasCode = userPuskesmasCode; // Force use user's own puskesmas
     }
 
     setProgramTypeError(false);
@@ -262,7 +285,7 @@ export default function InputDataPage() {
           realization: 0,
         };
         return {
-          puskesmas_code: selectedPuskesmas,
+          puskesmas_code: targetPuskesmasCode, // KEAMANAN: Gunakan validated code
           indicator_name: ind.indicator_name,
           period: selectedPeriod,
           program_type: selectedProgramType, // WAJIB: Program Type
@@ -280,7 +303,10 @@ export default function InputDataPage() {
 
       if (upsertError) throw upsertError;
 
-      showToast(`Data ${getProgramLabel(selectedProgramType)} berhasil disimpan!`, "success");
+      showToast(
+        `Data ${getProgramLabel(selectedProgramType)} berhasil disimpan!`,
+        "success",
+      );
       setIsEditMode(true);
     } catch (err) {
       console.error("Save error:", err);
@@ -399,8 +425,8 @@ export default function InputDataPage() {
   }
 
   // Get program-specific indicators dynamically
-  const programIndicators = selectedProgramType 
-    ? getIndicatorsForProgram(selectedProgramType) 
+  const programIndicators = selectedProgramType
+    ? getIndicatorsForProgram(selectedProgramType)
     : { sectionA: [], sectionBBarang: [], sectionBSDM: [] };
 
   // Prepare section data - DINAMIS BERDASARKAN PROGRAM
@@ -415,8 +441,12 @@ export default function InputDataPage() {
   );
 
   // Get program theme if selected
-  const programTheme = selectedProgramType ? getProgram(selectedProgramType).theme : null;
-  const programConfig = selectedProgramType ? getProgram(selectedProgramType) : null;
+  const programTheme = selectedProgramType
+    ? getProgram(selectedProgramType).theme
+    : null;
+  const programConfig = selectedProgramType
+    ? getProgram(selectedProgramType)
+    : null;
 
   return (
     <DashboardLayout>
@@ -525,8 +555,8 @@ export default function InputDataPage() {
                     setProgramTypeError(false);
                   }}
                   className={`px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[200px] ${
-                    programTypeError 
-                      ? "border-red-500 bg-red-50" 
+                    programTypeError
+                      ? "border-red-500 bg-red-50"
                       : "border-slate-300"
                   }`}
                 >
@@ -611,7 +641,8 @@ export default function InputDataPage() {
                   Pilih Jenis Layanan Terlebih Dahulu
                 </p>
                 <p className="text-sm text-amber-700">
-                  Anda harus memilih jenis layanan (Hipertensi / Diabetes / ODGJ) sebelum dapat menginput data.
+                  Anda harus memilih jenis layanan (Hipertensi / Diabetes /
+                  ODGJ) sebelum dapat menginput data.
                 </p>
               </div>
             </div>
@@ -698,221 +729,17 @@ export default function InputDataPage() {
         )}
 
         {/* Form Sections - Only show when ProgramType AND Puskesmas selected */}
-        {selectedProgramType && selectedPuskesmas && indicators.length > 0 && !loadingData && (
-          <>
-            {/* Current Selection Badge */}
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                  <svg
-                    className="w-5 h-5 text-white"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-sm text-blue-600">Sedang Menginput Data:</p>
-                  <p className="font-bold text-blue-900">{getProgramLabel(selectedProgramType)}</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-xs text-slate-500">Periode</p>
-                <p className="font-semibold text-slate-700">{formatPeriodLabel(selectedPeriod)}</p>
-              </div>
-            </div>
-
-            {/* SECTION A: PENERIMAAN LAYANAN DASAR */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-              <div className="px-6 py-4 bg-blue-100 border-b border-blue-200">
-                <h2 className="text-lg font-bold text-blue-900">
-                  A. PENERIMAAN LAYANAN DASAR (100%)
-                </h2>
-                <p className="text-sm text-blue-700 mt-1">
-                  Jumlah sasaran yang wajib mendapat pelayanan SPM
-                </p>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-blue-800 text-white">
-                      <th className="px-4 py-3 text-center text-sm font-semibold w-12">
-                        No
-                      </th>
-                      <th className="px-4 py-3 text-left text-sm font-semibold">
-                        Indikator SPM
-                      </th>
-                      <th className="px-4 py-3 text-center text-sm font-semibold w-24">
-                        Satuan
-                      </th>
-                      <th className="px-4 py-3 text-center text-sm font-semibold w-32">
-                        Target
-                      </th>
-                      <th className="px-4 py-3 text-center text-sm font-semibold w-32">
-                        Realisasi
-                      </th>
-                      <th className="px-4 py-3 text-center text-sm font-semibold w-28">
-                        % Capaian
-                      </th>
-                      <th className="px-4 py-3 text-center text-sm font-semibold w-32">
-                        Belum Terlayani
-                      </th>
-                      <th className="px-4 py-3 text-center text-sm font-semibold w-28">
-                        Status
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sectionAData.map((ind, idx) =>
-                      renderInputRow(ind, idx, 1),
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* SECTION B: MUTU MINIMAL */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-              <div className="px-6 py-4 bg-gray-100 border-b border-gray-200">
-                <h2 className="text-lg font-bold text-gray-900">
-                  B. MUTU MINIMAL (BARANG / JASA / SDM)
-                </h2>
-                <p className="text-sm text-gray-600 mt-1">
-                  Ketersediaan sarana, prasarana, dan sumber daya manusia
-                </p>
-              </div>
-
-              {/* Sub-section: Barang & Jasa */}
-              <div className="border-b border-gray-200">
-                <div className="px-6 py-2 bg-amber-50 border-b border-amber-100">
-                  <h3 className="text-sm font-semibold text-amber-800">
-                    📦 Barang & Jasa
-                  </h3>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="bg-amber-700 text-white">
-                        <th className="px-4 py-3 text-center text-sm font-semibold w-12">
-                          No
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold">
-                          Indikator SPM
-                        </th>
-                        <th className="px-4 py-3 text-center text-sm font-semibold w-24">
-                          Satuan
-                        </th>
-                        <th className="px-4 py-3 text-center text-sm font-semibold w-32">
-                          Target
-                        </th>
-                        <th className="px-4 py-3 text-center text-sm font-semibold w-32">
-                          Realisasi
-                        </th>
-                        <th className="px-4 py-3 text-center text-sm font-semibold w-28">
-                          % Capaian
-                        </th>
-                        <th className="px-4 py-3 text-center text-sm font-semibold w-32">
-                          Belum Terlayani
-                        </th>
-                        <th className="px-4 py-3 text-center text-sm font-semibold w-28">
-                          Status
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sectionBBarangData.map((ind, idx) =>
-                        renderInputRow(ind, idx, 2),
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Sub-section: SDM Kesehatan */}
-              <div>
-                <div className="px-6 py-2 bg-purple-50 border-b border-purple-100">
-                  <h3 className="text-sm font-semibold text-purple-800">
-                    👨‍⚕️ SDM Kesehatan
-                  </h3>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="bg-purple-700 text-white">
-                        <th className="px-4 py-3 text-center text-sm font-semibold w-12">
-                          No
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold">
-                          Indikator SPM
-                        </th>
-                        <th className="px-4 py-3 text-center text-sm font-semibold w-24">
-                          Satuan
-                        </th>
-                        <th className="px-4 py-3 text-center text-sm font-semibold w-32">
-                          Target
-                        </th>
-                        <th className="px-4 py-3 text-center text-sm font-semibold w-32">
-                          Realisasi
-                        </th>
-                        <th className="px-4 py-3 text-center text-sm font-semibold w-28">
-                          % Capaian
-                        </th>
-                        <th className="px-4 py-3 text-center text-sm font-semibold w-32">
-                          Belum Terlayani
-                        </th>
-                        <th className="px-4 py-3 text-center text-sm font-semibold w-28">
-                          Status
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sectionBSdmData.map((ind, idx) =>
-                        renderInputRow(ind, idx, 7),
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-            {/* Save Button - Bottom */}
-            <div className="flex justify-end">
-              <button
-                onClick={handleSave}
-                disabled={saving || loadingData || !selectedPuskesmas || !selectedProgramType}
-                className="px-8 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold rounded-xl transition-colors flex items-center gap-2 text-lg shadow-lg"
-              >
-                {saving ? (
-                  <>
-                    <svg className="animate-spin h-6 w-6" viewBox="0 0 24 24">
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                        fill="none"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
-                    Menyimpan...
-                  </>
-                ) : (
-                  <>
+        {selectedProgramType &&
+          selectedPuskesmas &&
+          indicators.length > 0 &&
+          !loadingData && (
+            <>
+              {/* Current Selection Badge */}
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
                     <svg
-                      className="w-6 h-6"
+                      className="w-5 h-5 text-white"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -921,16 +748,234 @@ export default function InputDataPage() {
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         strokeWidth={2}
-                        d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                       />
                     </svg>
-                    💾 Simpan Semua Data
-                  </>
-                )}
-              </button>
-            </div>
-          </>
-        )}
+                  </div>
+                  <div>
+                    <p className="text-sm text-blue-600">
+                      Sedang Menginput Data:
+                    </p>
+                    <p className="font-bold text-blue-900">
+                      {getProgramLabel(selectedProgramType)}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-slate-500">Periode</p>
+                  <p className="font-semibold text-slate-700">
+                    {formatPeriodLabel(selectedPeriod)}
+                  </p>
+                </div>
+              </div>
+
+              {/* SECTION A: PENERIMAAN LAYANAN DASAR */}
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="px-6 py-4 bg-blue-100 border-b border-blue-200">
+                  <h2 className="text-lg font-bold text-blue-900">
+                    A. PENERIMAAN LAYANAN DASAR (100%)
+                  </h2>
+                  <p className="text-sm text-blue-700 mt-1">
+                    Jumlah sasaran yang wajib mendapat pelayanan SPM
+                  </p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-blue-800 text-white">
+                        <th className="px-4 py-3 text-center text-sm font-semibold w-12">
+                          No
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold">
+                          Indikator SPM
+                        </th>
+                        <th className="px-4 py-3 text-center text-sm font-semibold w-24">
+                          Satuan
+                        </th>
+                        <th className="px-4 py-3 text-center text-sm font-semibold w-32">
+                          Target
+                        </th>
+                        <th className="px-4 py-3 text-center text-sm font-semibold w-32">
+                          Realisasi
+                        </th>
+                        <th className="px-4 py-3 text-center text-sm font-semibold w-28">
+                          % Capaian
+                        </th>
+                        <th className="px-4 py-3 text-center text-sm font-semibold w-32">
+                          Belum Terlayani
+                        </th>
+                        <th className="px-4 py-3 text-center text-sm font-semibold w-28">
+                          Status
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sectionAData.map((ind, idx) =>
+                        renderInputRow(ind, idx, 1),
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* SECTION B: MUTU MINIMAL */}
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="px-6 py-4 bg-gray-100 border-b border-gray-200">
+                  <h2 className="text-lg font-bold text-gray-900">
+                    B. MUTU MINIMAL (BARANG / JASA / SDM)
+                  </h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Ketersediaan sarana, prasarana, dan sumber daya manusia
+                  </p>
+                </div>
+
+                {/* Sub-section: Barang & Jasa */}
+                <div className="border-b border-gray-200">
+                  <div className="px-6 py-2 bg-amber-50 border-b border-amber-100">
+                    <h3 className="text-sm font-semibold text-amber-800">
+                      📦 Barang & Jasa
+                    </h3>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-amber-700 text-white">
+                          <th className="px-4 py-3 text-center text-sm font-semibold w-12">
+                            No
+                          </th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold">
+                            Indikator SPM
+                          </th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold w-24">
+                            Satuan
+                          </th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold w-32">
+                            Target
+                          </th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold w-32">
+                            Realisasi
+                          </th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold w-28">
+                            % Capaian
+                          </th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold w-32">
+                            Belum Terlayani
+                          </th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold w-28">
+                            Status
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sectionBBarangData.map((ind, idx) =>
+                          renderInputRow(ind, idx, 2),
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Sub-section: SDM Kesehatan */}
+                <div>
+                  <div className="px-6 py-2 bg-purple-50 border-b border-purple-100">
+                    <h3 className="text-sm font-semibold text-purple-800">
+                      👨‍⚕️ SDM Kesehatan
+                    </h3>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-purple-700 text-white">
+                          <th className="px-4 py-3 text-center text-sm font-semibold w-12">
+                            No
+                          </th>
+                          <th className="px-4 py-3 text-left text-sm font-semibold">
+                            Indikator SPM
+                          </th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold w-24">
+                            Satuan
+                          </th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold w-32">
+                            Target
+                          </th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold w-32">
+                            Realisasi
+                          </th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold w-28">
+                            % Capaian
+                          </th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold w-32">
+                            Belum Terlayani
+                          </th>
+                          <th className="px-4 py-3 text-center text-sm font-semibold w-28">
+                            Status
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sectionBSdmData.map((ind, idx) =>
+                          renderInputRow(ind, idx, 7),
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              {/* Save Button - Bottom */}
+              <div className="flex justify-end">
+                <button
+                  onClick={handleSave}
+                  disabled={
+                    saving ||
+                    loadingData ||
+                    !selectedPuskesmas ||
+                    !selectedProgramType
+                  }
+                  className="px-8 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold rounded-xl transition-colors flex items-center gap-2 text-lg shadow-lg"
+                >
+                  {saving ? (
+                    <>
+                      <svg className="animate-spin h-6 w-6" viewBox="0 0 24 24">
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                          fill="none"
+                        />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        />
+                      </svg>
+                      Menyimpan...
+                    </>
+                  ) : (
+                    <>
+                      <svg
+                        className="w-6 h-6"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"
+                        />
+                      </svg>
+                      💾 Simpan Semua Data
+                    </>
+                  )}
+                </button>
+              </div>
+            </>
+          )}
 
         {/* Instructions */}
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
@@ -939,7 +984,9 @@ export default function InputDataPage() {
           </h3>
           <ul className="text-sm text-blue-700 space-y-1">
             <li>
-              • <strong className="text-red-600">WAJIB:</strong> Pilih <strong>Jenis Layanan</strong> terlebih dahulu (Hipertensi / Diabetes / ODGJ)
+              • <strong className="text-red-600">WAJIB:</strong> Pilih{" "}
+              <strong>Jenis Layanan</strong> terlebih dahulu (Hipertensi /
+              Diabetes / ODGJ)
             </li>
             {isAdmin && (
               <li>
