@@ -61,13 +61,10 @@ export default function IndikatorPage() {
   const periodOptions = useMemo(() => generateTriwulanOptions(), []);
 
   // Helper: Check if user is admin based on email
-  const checkIsAdmin = (email) => {
-    const adminEmails = [
-      "kab@dinkes.go.id",
-      "admin@dinkes.go.id",
-      "admin@example.com",
-    ];
-    return adminEmails.includes(email?.toLowerCase());
+  // Check admin status from Supabase user_metadata
+  // Set di Supabase Dashboard: Authentication > Users > Edit > user_metadata: {"is_admin": true}
+  const checkIsAdmin = (user) => {
+    return user?.user_metadata?.is_admin === true;
   };
 
   // Get indicator options based on selected program
@@ -86,7 +83,7 @@ export default function IndikatorPage() {
 
         if (session) {
           setCurrentUser(session.user);
-          const adminStatus = checkIsAdmin(session.user.email);
+          const adminStatus = checkIsAdmin(session.user);
           setIsAdmin(adminStatus);
 
           if (!adminStatus) {

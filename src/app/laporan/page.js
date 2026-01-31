@@ -56,13 +56,10 @@ export default function LaporanPage() {
   );
 
   // Check if user is admin
-  const checkIsAdmin = (email) => {
-    const adminEmails = [
-      "kab@dinkes.go.id",
-      "admin@dinkes.go.id",
-      "admin@example.com",
-    ];
-    return adminEmails.includes(email?.toLowerCase());
+  // Check admin status from Supabase user_metadata
+  // Set di Supabase Dashboard: Authentication > Users > Edit > user_metadata: {"is_admin": true}
+  const checkIsAdmin = (user) => {
+    return user?.user_metadata?.is_admin === true;
   };
 
   // Fetch user session & initial data
@@ -83,7 +80,7 @@ export default function LaporanPage() {
         }
 
         setCurrentUser(session.user);
-        const adminStatus = checkIsAdmin(session.user.email);
+        const adminStatus = checkIsAdmin(session.user);
         setIsAdmin(adminStatus);
 
         // Fetch puskesmas list
@@ -429,7 +426,29 @@ export default function LaporanPage() {
   const handleExportExcel = async () => {
     setExporting(true);
     try {
-      const XLSX = await import("xlsx");
+      // Validasi data sebelum export
+      if (isRecapView && (!recapReportData || recapReportData.length === 0)) {
+        setError("Tidak ada data rekap untuk diekspor. Pastikan data sudah dimuat.");
+        setExporting(false);
+        return;
+      }
+      if (!isRecapView && (!data || data.length === 0)) {
+        setError("Tidak ada data detail untuk diekspor. Pastikan data sudah dimuat.");
+        setExporting(false);
+        return;
+      }
+
+      // Dynamic import dengan error handling spesifik
+      let XLSX;
+      try {
+        XLSX = await import("xlsx");
+      } catch (importErr) {
+        logger.error("Failed to load xlsx library", importErr);
+        setError("Gagal memuat library Excel. Silakan refresh halaman dan coba lagi.");
+        setExporting(false);
+        return;
+      }
+
       const isSemua = selectedProgramType === PROGRAM_TYPES.SEMUA_PROGRAM;
 
       // List 4 program untuk SEMUA_PROGRAM
@@ -593,6 +612,13 @@ export default function LaporanPage() {
             const prog = getProgram(progType);
             const catData = calculateCategoryData(progType);
 
+            // Safety check: Skip jika catData tidak valid
+            if (!catData || !catData.indicatorData) {
+              rows.push([`Data untuk ${prog?.label || progType} tidak tersedia`]);
+              rows.push([""]);
+              return; // Skip ke program berikutnya
+            }
+
             rows.push([
               "═══════════════════════════════════════════════════════════════════════════════════════",
             ]);
@@ -646,10 +672,10 @@ export default function LaporanPage() {
               "",
               "SUBTOTAL LAYANAN DASAR (A)",
               "",
-              catData.partA.target,
-              catData.partA.realization,
-              `${catData.partA.percentage}%`,
-              parseFloat(catData.partA.percentage) >= 80
+              catData.partA?.target || 0,
+              catData.partA?.realization || 0,
+              `${catData.partA?.percentage || "0.00"}%`,
+              parseFloat(catData.partA?.percentage || 0) >= 80
                 ? "TUNTAS"
                 : "BELUM TUNTAS",
             ]);
@@ -733,20 +759,20 @@ export default function LaporanPage() {
               "",
               "SUBTOTAL MUTU MINIMAL (B)",
               "",
-              catData.partB.target,
-              catData.partB.realization,
-              `${catData.partB.percentage}%`,
-              parseFloat(catData.partB.percentage) >= 80
+              catData.partB?.target || 0,
+              catData.partB?.realization || 0,
+              `${catData.partB?.percentage || "0.00"}%`,
+              parseFloat(catData.partB?.percentage || 0) >= 80
                 ? "TUNTAS"
                 : "BELUM TUNTAS",
             ]);
             rows.push([""]);
 
             // SUMMARY per program
-            const nilaiA = (parseFloat(catData.partA.percentage) * 0.8).toFixed(
+            const nilaiA = (parseFloat(catData.partA?.percentage || 0) * 0.8).toFixed(
               2,
             );
-            const nilaiB = (parseFloat(catData.partB.percentage) * 0.2).toFixed(
+            const nilaiB = (parseFloat(catData.partB?.percentage || 0) * 0.2).toFixed(
               2,
             );
             const totalNilai = (
@@ -758,13 +784,13 @@ export default function LaporanPage() {
             rows.push([
               "A. Layanan Dasar",
               "80%",
-              `${catData.partA.percentage}%`,
+              `${catData.partA?.percentage || "0.00"}%`,
               nilaiA,
             ]);
             rows.push([
               "B. Mutu Minimal",
               "20%",
-              `${catData.partB.percentage}%`,
+              `${catData.partB?.percentage || "0.00"}%`,
               nilaiB,
             ]);
             rows.push(["TOTAL NILAI SPM", "100%", "", totalNilai]);
@@ -782,6 +808,12 @@ export default function LaporanPage() {
           // PROGRAM TUNGGAL: Format Section A & B standar
           // ============================================
           const catData = calculateCategoryData();
+
+          // Safety check: Validasi catData
+          if (!catData || !catData.indicatorData) {
+            rows.push(["Data tidak tersedia untuk program ini"]);
+            rows.push([""]);
+          } else {
 
           rows.push([
             `JENIS PELAYANAN DASAR: ${programConfig.description?.toUpperCase() || programConfig.label.toUpperCase()}`,
@@ -835,10 +867,10 @@ export default function LaporanPage() {
             "",
             "TOTAL LAYANAN DASAR (A)",
             "",
-            catData.partA.target,
-            catData.partA.realization,
-            `${catData.partA.percentage}%`,
-            parseFloat(catData.partA.percentage) >= 80
+            catData.partA?.target || 0,
+            catData.partA?.realization || 0,
+            `${catData.partA?.percentage || "0.00"}%`,
+            parseFloat(catData.partA?.percentage || 0) >= 80
               ? "TUNTAS"
               : "BELUM TUNTAS",
           ]);
@@ -929,10 +961,10 @@ export default function LaporanPage() {
             "",
             "TOTAL MUTU MINIMAL (B)",
             "",
-            catData.partB.target,
-            catData.partB.realization,
-            `${catData.partB.percentage}%`,
-            parseFloat(catData.partB.percentage) >= 80
+            catData.partB?.target || 0,
+            catData.partB?.realization || 0,
+            `${catData.partB?.percentage || "0.00"}%`,
+            parseFloat(catData.partB?.percentage || 0) >= 80
               ? "TUNTAS"
               : "BELUM TUNTAS",
           ]);
@@ -949,10 +981,10 @@ export default function LaporanPage() {
           rows.push([""]);
           rows.push(["Komponen", "Bobot", "Capaian (%)", "Nilai Tertimbang"]);
 
-          const nilaiA = (parseFloat(catData.partA.percentage) * 0.8).toFixed(
+          const nilaiA = (parseFloat(catData.partA?.percentage || 0) * 0.8).toFixed(
             2,
           );
-          const nilaiB = (parseFloat(catData.partB.percentage) * 0.2).toFixed(
+          const nilaiB = (parseFloat(catData.partB?.percentage || 0) * 0.2).toFixed(
             2,
           );
           const totalNilai = (parseFloat(nilaiA) + parseFloat(nilaiB)).toFixed(
@@ -962,13 +994,13 @@ export default function LaporanPage() {
           rows.push([
             "A. Layanan Dasar",
             "80%",
-            `${catData.partA.percentage}%`,
+            `${catData.partA?.percentage || "0.00"}%`,
             nilaiA,
           ]);
           rows.push([
             "B. Mutu Minimal",
             "20%",
-            `${catData.partB.percentage}%`,
+            `${catData.partB?.percentage || "0.00"}%`,
             nilaiB,
           ]);
           rows.push([""]);
@@ -979,6 +1011,7 @@ export default function LaporanPage() {
             "",
             parseFloat(totalNilai) >= 80 ? "TUNTAS" : "BELUM TUNTAS",
           ]);
+          } // End of catData validation else block
         }
       }
 
@@ -1037,8 +1070,31 @@ export default function LaporanPage() {
   const handleExportPDF = async () => {
     setExporting(true);
     try {
-      const { jsPDF } = await import("jspdf");
-      const autoTable = (await import("jspdf-autotable")).default;
+      // Validasi data sebelum export
+      if (isRecapView && (!recapReportData || recapReportData.length === 0)) {
+        setError("Tidak ada data rekap untuk diekspor. Pastikan data sudah dimuat.");
+        setExporting(false);
+        return;
+      }
+      if (!isRecapView && (!data || data.length === 0)) {
+        setError("Tidak ada data detail untuk diekspor. Pastikan data sudah dimuat.");
+        setExporting(false);
+        return;
+      }
+
+      // Dynamic import dengan error handling spesifik
+      let jsPDF, autoTable;
+      try {
+        const jspdfModule = await import("jspdf");
+        jsPDF = jspdfModule.jsPDF;
+        autoTable = (await import("jspdf-autotable")).default;
+      } catch (importErr) {
+        logger.error("Failed to load PDF libraries", importErr);
+        setError("Gagal memuat library PDF. Silakan refresh halaman dan coba lagi.");
+        setExporting(false);
+        return;
+      }
+
       const isSemua = selectedProgramType === PROGRAM_TYPES.SEMUA_PROGRAM;
 
       // List 4 program untuk SEMUA_PROGRAM
@@ -1357,6 +1413,11 @@ export default function LaporanPage() {
             const catData = calculateCategoryData(progType);
             const progColor = PROGRAM_COLORS[progType];
 
+            // Safety check: Skip jika catData tidak valid
+            if (!catData || !catData.indicatorData) {
+              continue; // Skip ke program berikutnya
+            }
+
             // Add new page if needed
             if (currentY > pageHeight - 100) {
               doc.addPage();
@@ -1421,9 +1482,9 @@ export default function LaporanPage() {
                   "",
                   "SUBTOTAL (A)",
                   "",
-                  catData.partA.target.toLocaleString("id-ID"),
-                  catData.partA.realization.toLocaleString("id-ID"),
-                  `${catData.partA.percentage}%`,
+                  (catData.partA?.target || 0).toLocaleString("id-ID"),
+                  (catData.partA?.realization || 0).toLocaleString("id-ID"),
+                  `${catData.partA?.percentage || "0.00"}%`,
                 ],
               ],
               theme: "grid",
@@ -1496,9 +1557,9 @@ export default function LaporanPage() {
                   "",
                   "SUBTOTAL (B)",
                   "",
-                  catData.partB.target.toLocaleString("id-ID"),
-                  catData.partB.realization.toLocaleString("id-ID"),
-                  `${catData.partB.percentage}%`,
+                  (catData.partB?.target || 0).toLocaleString("id-ID"),
+                  (catData.partB?.realization || 0).toLocaleString("id-ID"),
+                  `${catData.partB?.percentage || "0.00"}%`,
                 ],
               ],
               theme: "grid",
@@ -1527,10 +1588,10 @@ export default function LaporanPage() {
             currentY = doc.lastAutoTable.finalY + 4;
 
             // Summary per program
-            const nilaiA = (parseFloat(catData.partA.percentage) * 0.8).toFixed(
+            const nilaiA = (parseFloat(catData.partA?.percentage || 0) * 0.8).toFixed(
               2,
             );
-            const nilaiB = (parseFloat(catData.partB.percentage) * 0.2).toFixed(
+            const nilaiB = (parseFloat(catData.partB?.percentage || 0) * 0.2).toFixed(
               2,
             );
             const totalNilai = (
@@ -1546,13 +1607,13 @@ export default function LaporanPage() {
                 [
                   "A. Layanan Dasar",
                   "80%",
-                  `${catData.partA.percentage}%`,
+                  `${catData.partA?.percentage || "0.00"}%`,
                   nilaiA,
                 ],
                 [
                   "B. Mutu Minimal",
                   "20%",
-                  `${catData.partB.percentage}%`,
+                  `${catData.partB?.percentage || "0.00"}%`,
                   nilaiB,
                 ],
               ],
@@ -1586,6 +1647,12 @@ export default function LaporanPage() {
           // PROGRAM TUNGGAL - Format Section A & B lengkap
           // ============================================
           const catData = calculateCategoryData();
+
+          // Safety check: Validasi catData
+          if (!catData || !catData.indicatorData) {
+            doc.setFontSize(10);
+            doc.text("Data tidak tersedia untuk program ini", 14, currentY);
+          } else {
 
           doc.setFontSize(11);
           doc.setFont("helvetica", "bold");
@@ -1652,10 +1719,10 @@ export default function LaporanPage() {
                 "",
                 "SUBTOTAL LAYANAN DASAR (A)",
                 "",
-                catData.partA.target.toLocaleString("id-ID"),
-                catData.partA.realization.toLocaleString("id-ID"),
-                `${catData.partA.percentage}%`,
-                parseFloat(catData.partA.percentage) >= 80 ? "TUNTAS" : "BELUM",
+                (catData.partA?.target || 0).toLocaleString("id-ID"),
+                (catData.partA?.realization || 0).toLocaleString("id-ID"),
+                `${catData.partA?.percentage || "0.00"}%`,
+                parseFloat(catData.partA?.percentage || 0) >= 80 ? "TUNTAS" : "BELUM",
               ],
             ],
             theme: "grid",
@@ -1817,9 +1884,9 @@ export default function LaporanPage() {
                 "",
                 "SUBTOTAL MUTU MINIMAL (B)",
                 "",
-                catData.partB.target.toLocaleString("id-ID"),
-                catData.partB.realization.toLocaleString("id-ID"),
-                `${catData.partB.percentage}%`,
+                (catData.partB?.target || 0).toLocaleString("id-ID"),
+                (catData.partB?.realization || 0).toLocaleString("id-ID"),
+                `${catData.partB?.percentage || "0.00"}%`,
               ],
             ],
             theme: "grid",
@@ -1853,10 +1920,10 @@ export default function LaporanPage() {
             currentY = 20;
           }
 
-          const nilaiA = (parseFloat(catData.partA.percentage) * 0.8).toFixed(
+          const nilaiA = (parseFloat(catData.partA?.percentage || 0) * 0.8).toFixed(
             2,
           );
-          const nilaiB = (parseFloat(catData.partB.percentage) * 0.2).toFixed(
+          const nilaiB = (parseFloat(catData.partB?.percentage || 0) * 0.2).toFixed(
             2,
           );
           const totalNilai = (parseFloat(nilaiA) + parseFloat(nilaiB)).toFixed(
@@ -1881,13 +1948,13 @@ export default function LaporanPage() {
               [
                 "A. Layanan Dasar",
                 "80%",
-                `${catData.partA.percentage}%`,
+                `${catData.partA?.percentage || "0.00"}%`,
                 nilaiA,
               ],
               [
                 "B. Mutu Minimal",
                 "20%",
-                `${catData.partB.percentage}%`,
+                `${catData.partB?.percentage || "0.00"}%`,
                 nilaiB,
               ],
             ],
@@ -1916,6 +1983,7 @@ export default function LaporanPage() {
               3: { halign: "center", cellWidth: 35 },
             },
           });
+          } // End of catData validation else block
         }
       }
 

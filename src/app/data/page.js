@@ -24,13 +24,10 @@ export default function DataPage() {
   const [userPuskesmasCode, setUserPuskesmasCode] = useState(null);
 
   // Helper: Check if user is admin based on email
-  const checkIsAdmin = (email) => {
-    const adminEmails = [
-      "kab@dinkes.go.id",
-      "admin@dinkes.go.id",
-      "admin@example.com",
-    ];
-    return adminEmails.includes(email?.toLowerCase());
+  // Check admin status from Supabase user_metadata
+  // Set di Supabase Dashboard: Authentication > Users > Edit > user_metadata: {"is_admin": true}
+  const checkIsAdmin = (user) => {
+    return user?.user_metadata?.is_admin === true;
   };
 
   useEffect(() => {
@@ -47,8 +44,8 @@ export default function DataPage() {
     } else {
       setUser(session.user);
 
-      // KEAMANAN: Set role dan puskesmas code berdasarkan email
-      const adminStatus = checkIsAdmin(session.user.email);
+      // KEAMANAN: Set role dan puskesmas code berdasarkan user_metadata
+      const adminStatus = checkIsAdmin(session.user);
       setIsAdmin(adminStatus);
 
       if (!adminStatus) {
