@@ -215,38 +215,29 @@ export function calculateMetrics(target, realization) {
 }
 
 /**
- * Admin email list - centralized configuration
- * Digunakan untuk mengecek apakah user adalah admin
- */
-export const ADMIN_EMAILS = [
-  "kab@dinkes.go.id",
-  "admin@dinkes.go.id",
-  "admin@example.com",
-];
-
-/**
- * Check if email belongs to admin
- * @param {string} email - User email
+ * Check if user is admin from Supabase user metadata
+ * Set admin di Supabase Dashboard: Authentication > Users > Edit user > user_metadata: {"is_admin": true}
+ * @param {object} user - Supabase user object
  * @returns {boolean}
  */
-export function isAdminEmail(email) {
-  if (!email) return false;
-  return ADMIN_EMAILS.includes(email.toLowerCase());
+export function isAdminUser(user) {
+  if (!user) return false;
+  return user.user_metadata?.is_admin === true;
 }
 
 /**
- * Get current user's puskesmas info from their email
- * @param {string} email - User email (e.g., "ant@dinkes.go.id")
+ * Get current user's puskesmas info
+ * @param {object} user - Supabase user object
  * @returns {{code: string, isAdmin: boolean}}
  */
-export function parseUserEmail(email) {
-  if (!email) return { code: null, isAdmin: false };
+export function parseUserInfo(user) {
+  if (!user) return { code: null, isAdmin: false };
 
-  if (isAdminEmail(email)) {
+  if (isAdminUser(user)) {
     return { code: "KAB", isAdmin: true };
   }
 
-  const code = email.split("@")[0].toUpperCase();
+  const code = user.email?.split("@")[0].toUpperCase() || null;
   return { code, isAdmin: false };
 }
 

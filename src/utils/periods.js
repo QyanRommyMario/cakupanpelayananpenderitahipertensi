@@ -6,8 +6,8 @@
 
 /**
  * Generate array of monthly period options
- * Format: ['2025-01', '2025-02', ..., '2026-12']
- * Covers: From January 2025 to December 2026 + Annual recap options
+ * Format: ['2025-12', '2026-01', ..., '2026-12']
+ * Covers: December 2025 (annual recap) + All months of 2026
  *
  * @returns {Array<{value: string, label: string, type: 'month'|'annual'}>}
  */
@@ -28,30 +28,43 @@ export function generateTriwulanOptions() {
     "Desember",
   ];
 
-  // Generate months from 2025 to 2026 only
-  const years = [2025, 2026];
+  // === TAHUN 2025 - Hanya Desember (berisi rekap capaian setahun) ===
+  options.push({
+    value: "2025-12",
+    label: "Desember 2025",
+    type: "month",
+    year: 2025,
+    month: 12,
+  });
 
-  years.forEach((year) => {
-    // Generate all 12 months for each year FIRST
-    for (let month = 1; month <= 12; month++) {
-      const monthStr = month.toString().padStart(2, "0");
-      options.push({
-        value: `${year}-${monthStr}`,
-        label: `${monthNames[month - 1]} ${year}`,
-        type: "month",
-        year: year,
-        month: month,
-      });
-    }
+  // Add annual recap for 2025
+  options.push({
+    value: "REKAP-2025",
+    label: "📊 REKAP TAHUN 2025",
+    type: "annual",
+    year: 2025,
+    month: null,
+  });
 
-    // Add annual recap option at the END of each year
+  // === TAHUN 2026 - Semua 12 bulan ===
+  for (let month = 1; month <= 12; month++) {
+    const monthStr = month.toString().padStart(2, "0");
     options.push({
-      value: `REKAP-${year}`,
-      label: `📊 REKAP TAHUN ${year}`,
-      type: "annual",
-      year: year,
-      month: null,
+      value: `2026-${monthStr}`,
+      label: `${monthNames[month - 1]} 2026`,
+      type: "month",
+      year: 2026,
+      month: month,
     });
+  }
+
+  // Add annual recap for 2026
+  options.push({
+    value: "REKAP-2026",
+    label: "📊 REKAP TAHUN 2026",
+    type: "annual",
+    year: 2026,
+    month: null,
   });
 
   return options;
@@ -71,9 +84,9 @@ export function getCurrentPeriod() {
   if (year > 2026) {
     return "2026-12";
   }
-  // If current year is before 2025, default to Jan 2025
-  if (year < 2025) {
-    return "2025-01";
+  // If current year is 2025 or before, default to Dec 2025 (annual recap)
+  if (year <= 2025) {
+    return "2025-12";
   }
 
   const monthStr = month.toString().padStart(2, "0");

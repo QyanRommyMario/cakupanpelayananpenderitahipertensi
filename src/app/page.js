@@ -49,14 +49,10 @@ export default function DashboardPage() {
   const [userPuskesmasCode, setUserPuskesmasCode] = useState(null);
   const [userLoaded, setUserLoaded] = useState(false); // PENTING: Track user loading
 
-  // Helper: Check if user is admin based on email
-  const checkIsAdmin = (email) => {
-    const adminEmails = [
-      "kab@dinkes.go.id",
-      "admin@dinkes.go.id",
-      "admin@example.com",
-    ];
-    return adminEmails.includes(email?.toLowerCase());
+  // Helper: Check if user is admin from Supabase user_metadata
+  // Set di Supabase Dashboard: Authentication > Users > Edit > user_metadata: {"is_admin": true}
+  const checkIsAdmin = (user) => {
+    return user?.user_metadata?.is_admin === true;
   };
 
   const periodOptions = useMemo(() => generateTriwulanOptions(), []);
@@ -72,7 +68,7 @@ export default function DashboardPage() {
 
         if (session) {
           setCurrentUser(session.user);
-          const adminStatus = checkIsAdmin(session.user.email);
+          const adminStatus = checkIsAdmin(session.user);
           setIsAdmin(adminStatus);
 
           // Extract puskesmas code from email for non-admin users
