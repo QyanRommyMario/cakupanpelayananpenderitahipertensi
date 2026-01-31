@@ -176,7 +176,10 @@ export default function ProgramDashboard({ programType, title }) {
         if (error) throw error;
         setData(achievements || []);
       } catch (err) {
-        logger.error("Error fetching data", err, { programType, selectedPeriod });
+        logger.error("Error fetching data", err, {
+          programType,
+          selectedPeriod,
+        });
       } finally {
         setLoadingData(false);
       }

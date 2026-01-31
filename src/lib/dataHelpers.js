@@ -132,7 +132,11 @@ export async function getAchievements(
   const { data, error } = await query;
 
   if (error) {
-    logger.apiError("getAchievements", error, { puskesmasCode, period, programType });
+    logger.apiError("getAchievements", error, {
+      puskesmasCode,
+      period,
+      programType,
+    });
     throw error;
   }
 

@@ -228,10 +228,13 @@ export default function DashboardPage() {
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div>
               <h1 className="text-3xl font-bold text-gray-800">
-                Selamat Datang di <span className="text-emerald-600">SMART</span> <span className="text-rose-500">PTM</span>
+                Selamat Datang di{" "}
+                <span className="text-emerald-600">SMART</span>{" "}
+                <span className="text-rose-500">PTM</span>
               </h1>
               <p className="text-gray-600 mt-1">
-                Platform Digital Pelaporan Terpadu Penyakit Tidak Menular Dinas Kesehatan Daerah Kabupaten Morowali Utara
+                Platform Digital Pelaporan Terpadu Penyakit Tidak Menular Dinas
+                Kesehatan Daerah Kabupaten Morowali Utara
               </p>
               <p className="text-gray-500 mt-2">
                 Periode:{" "}
@@ -411,7 +414,11 @@ export default function DashboardPage() {
               </div>
               <div className="p-4">
                 <div style={{ height: 300, minHeight: 280 }}>
-                  <ResponsiveContainer width="100%" height="100%" minHeight={280}>
+                  <ResponsiveContainer
+                    width="100%"
+                    height="100%"
+                    minHeight={280}
+                  >
                     <BarChart
                       data={barChartData}
                       margin={{ top: 10, right: 10, left: -10, bottom: 60 }}
@@ -474,7 +481,11 @@ export default function DashboardPage() {
               </div>
               <div className="p-4">
                 <div style={{ height: 300, minHeight: 280 }}>
-                  <ResponsiveContainer width="100%" height="100%" minHeight={280}>
+                  <ResponsiveContainer
+                    width="100%"
+                    height="100%"
+                    minHeight={280}
+                  >
                     <BarChart
                       data={barChartData}
                       margin={{ top: 10, right: 10, left: -10, bottom: 60 }}
@@ -537,7 +548,11 @@ export default function DashboardPage() {
               </div>
               <div className="p-4">
                 <div style={{ height: 300, minHeight: 280 }}>
-                  <ResponsiveContainer width="100%" height="100%" minHeight={280}>
+                  <ResponsiveContainer
+                    width="100%"
+                    height="100%"
+                    minHeight={280}
+                  >
                     <BarChart
                       data={barChartData}
                       margin={{ top: 10, right: 10, left: -10, bottom: 60 }}
@@ -600,7 +615,11 @@ export default function DashboardPage() {
               </div>
               <div className="p-4">
                 <div style={{ height: 300, minHeight: 280 }}>
-                  <ResponsiveContainer width="100%" height="100%" minHeight={280}>
+                  <ResponsiveContainer
+                    width="100%"
+                    height="100%"
+                    minHeight={280}
+                  >
                     <BarChart
                       data={barChartData}
                       margin={{ top: 10, right: 10, left: -10, bottom: 60 }}
