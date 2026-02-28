@@ -150,7 +150,10 @@ export default function IndikatorPage() {
         if (error) throw error;
         setRawData(data || []);
       } catch (err) {
-        logger.error("Error fetching indicator data", err, { selectedProgram, selectedIndicator });
+        logger.error("Error fetching indicator data", err, {
+          selectedProgram,
+          selectedIndicator,
+        });
       } finally {
         setLoadingData(false);
       }
@@ -547,7 +550,11 @@ export default function IndikatorPage() {
                     minWidth: 600,
                   }}
                 >
-                  <ResponsiveContainer width="100%" height="100%" minHeight={280}>
+                  <ResponsiveContainer
+                    width="100%"
+                    height="100%"
+                    minHeight={280}
+                  >
                     <BarChart
                       data={chartData}
                       layout="vertical"

@@ -7,11 +7,11 @@
 // PROGRAM TYPES - Nilai untuk database
 // ============================================
 export const PROGRAM_TYPES = {
-  SEMUA_PROGRAM: 'SEMUA_PROGRAM',
-  USIA_PRODUKTIF: 'USIA_PRODUKTIF',
-  HIPERTENSI: 'HIPERTENSI',
-  DIABETES: 'DIABETES',
-  ODGJ: 'ODGJ'
+  SEMUA_PROGRAM: "SEMUA_PROGRAM",
+  USIA_PRODUKTIF: "USIA_PRODUKTIF",
+  HIPERTENSI: "HIPERTENSI",
+  DIABETES: "DIABETES",
+  ODGJ: "ODGJ",
 };
 
 // ============================================
@@ -19,304 +19,298 @@ export const PROGRAM_TYPES = {
 // ============================================
 export const PROGRAMS = {
   SEMUA_PROGRAM: {
-    id: 'SEMUA_PROGRAM',
-    label: 'Semua Jenis SPM',
-    shortLabel: 'Semua SPM',
-    description: 'Rekapitulasi Seluruh Jenis Pelayanan SPM',
+    id: "SEMUA_PROGRAM",
+    label: "Semua Jenis SPM",
+    shortLabel: "Semua SPM",
+    description: "Rekapitulasi Seluruh Jenis Pelayanan SPM",
     path: null,
     indicators: null, // Tidak ada indikator spesifik
     theme: {
-      name: 'slate',
-      primary: '#475569',
-      primaryLight: '#f1f5f9',
-      primaryDark: '#334155',
-      bg: 'bg-slate-600',
-      bgLight: 'bg-slate-100',
-      bgLighter: 'bg-slate-50',
-      text: 'text-slate-600',
-      textDark: 'text-slate-700',
-      textLight: 'text-slate-100',
-      border: 'border-slate-200',
-      borderDark: 'border-slate-600',
-      ring: 'ring-slate-500',
-      hover: 'hover:bg-slate-700',
-      chartPrimary: '#475569',
-      chartSecondary: '#94a3b8',
-      chartAccent: '#cbd5e1',
+      name: "slate",
+      primary: "#475569",
+      primaryLight: "#f1f5f9",
+      primaryDark: "#334155",
+      bg: "bg-slate-600",
+      bgLight: "bg-slate-100",
+      bgLighter: "bg-slate-50",
+      text: "text-slate-600",
+      textDark: "text-slate-700",
+      textLight: "text-slate-100",
+      border: "border-slate-200",
+      borderDark: "border-slate-600",
+      ring: "ring-slate-500",
+      hover: "hover:bg-slate-700",
+      chartPrimary: "#475569",
+      chartSecondary: "#94a3b8",
+      chartAccent: "#cbd5e1",
     },
-    icon: '📊',
+    icon: "📊",
   },
   USIA_PRODUKTIF: {
-    id: 'USIA_PRODUKTIF',
-    label: 'SPM Usia Produktif',
-    shortLabel: 'Usia Produktif',
-    description: 'Pelayanan Kesehatan Pada Usia Produktif',
-    path: '/usia-produktif',
+    id: "USIA_PRODUKTIF",
+    label: "SPM Usia Produktif",
+    shortLabel: "Usia Produktif",
+    description: "Pelayanan Kesehatan Pada Usia Produktif",
+    path: "/usia-produktif",
     // DEFINISI KATEGORI INDIKATOR
     indicators: {
       // Bagian A: Sasaran Manusia (Pelayanan Dasar)
-      partA: ['JUMLAH YANG HARUS DILAYANI'],
+      partA: ["JUMLAH YANG HARUS DILAYANI"],
       // Bagian B: Sasaran Barang/Jasa (Mutu Layanan)
       partB: [
-        'Kit Pemeriksaan IVA',
-        'Alat Pemeriksaan Tekanan Darah',
-        'Alat Pemeriksaan Gula Darah',
-        'Strip Gula Darah',
-        'Alat Pemeriksaan Kolesterol',
-        'Strip Kolesterol',
-        'Pedoman Pelayanan Usia Produktif',
-        'Media KIE Usia Produktif',
-        'Formulir Pencatatan dan Pelaporan',
-        'Tenaga Medis : Dokter',
-        'Tenaga Kesehatan : Bidan',
-        'Tenaga Kesehatan : Perawat',
-        'Tenaga Kesehatan : Tenaga Gizi',
-        'Tenaga Kesehatan : Tenaga Promosi Kesehatan',
-        'Tenaga Kesehatan : Tenaga Laboratorium',
+        "Kit Pemeriksaan IVA",
+        "Alat Pemeriksaan Tekanan Darah",
+        "Alat Pemeriksaan Gula Darah",
+        "Strip Gula Darah",
+        "Alat Pemeriksaan Kolesterol",
+        "Strip Kolesterol",
+        "Pedoman Pelayanan Usia Produktif",
+        "Media KIE Usia Produktif",
+        "Formulir Pencatatan dan Pelaporan",
+        "Tenaga Medis : Dokter",
+        "Tenaga Kesehatan : Bidan",
+        "Tenaga Kesehatan : Perawat",
+        "Tenaga Kesehatan : Tenaga Gizi",
+        "Tenaga Kesehatan : Tenaga Promosi Kesehatan",
+        "Tenaga Kesehatan : Tenaga Laboratorium",
       ],
       partBBarang: [
-        'Kit Pemeriksaan IVA',
-        'Alat Pemeriksaan Tekanan Darah',
-        'Alat Pemeriksaan Gula Darah',
-        'Strip Gula Darah',
-        'Alat Pemeriksaan Kolesterol',
-        'Strip Kolesterol',
-        'Pedoman Pelayanan Usia Produktif',
-        'Media KIE Usia Produktif',
-        'Formulir Pencatatan dan Pelaporan',
+        "Kit Pemeriksaan IVA",
+        "Alat Pemeriksaan Tekanan Darah",
+        "Alat Pemeriksaan Gula Darah",
+        "Strip Gula Darah",
+        "Alat Pemeriksaan Kolesterol",
+        "Strip Kolesterol",
+        "Pedoman Pelayanan Usia Produktif",
+        "Media KIE Usia Produktif",
+        "Formulir Pencatatan dan Pelaporan",
       ],
       partBSDM: [
-        'Tenaga Medis : Dokter',
-        'Tenaga Kesehatan : Bidan',
-        'Tenaga Kesehatan : Perawat',
-        'Tenaga Kesehatan : Tenaga Gizi',
-        'Tenaga Kesehatan : Tenaga Promosi Kesehatan',
-        'Tenaga Kesehatan : Tenaga Laboratorium',
+        "Tenaga Medis : Dokter",
+        "Tenaga Kesehatan : Bidan",
+        "Tenaga Kesehatan : Perawat",
+        "Tenaga Kesehatan : Tenaga Gizi",
+        "Tenaga Kesehatan : Tenaga Promosi Kesehatan",
+        "Tenaga Kesehatan : Tenaga Laboratorium",
       ],
     },
     theme: {
-      name: 'sky',
+      name: "sky",
       // Warna Primary
-      primary: '#0284c7',        // sky-600
-      primaryLight: '#e0f2fe',   // sky-100
-      primaryDark: '#0369a1',    // sky-700
+      primary: "#0284c7", // sky-600
+      primaryLight: "#e0f2fe", // sky-100
+      primaryDark: "#0369a1", // sky-700
       // Tailwind Classes
-      bg: 'bg-sky-600',
-      bgLight: 'bg-sky-100',
-      bgLighter: 'bg-sky-50',
-      text: 'text-sky-600',
-      textDark: 'text-sky-700',
-      textLight: 'text-sky-100',
-      border: 'border-sky-200',
-      borderDark: 'border-sky-600',
-      ring: 'ring-sky-500',
-      hover: 'hover:bg-sky-700',
+      bg: "bg-sky-600",
+      bgLight: "bg-sky-100",
+      bgLighter: "bg-sky-50",
+      text: "text-sky-600",
+      textDark: "text-sky-700",
+      textLight: "text-sky-100",
+      border: "border-sky-200",
+      borderDark: "border-sky-600",
+      ring: "ring-sky-500",
+      hover: "hover:bg-sky-700",
       // Chart Colors
-      chartPrimary: '#0284c7',
-      chartSecondary: '#38bdf8',
-      chartAccent: '#7dd3fc',
+      chartPrimary: "#0284c7",
+      chartSecondary: "#38bdf8",
+      chartAccent: "#7dd3fc",
     },
-    icon: '👤',
+    icon: "👤",
   },
   HIPERTENSI: {
-    id: 'HIPERTENSI',
-    label: 'SPM Hipertensi',
-    shortLabel: 'Hipertensi',
-    description: 'Pelayanan Kesehatan Penderita Hipertensi',
-    path: '/hipertensi',
+    id: "HIPERTENSI",
+    label: "SPM Hipertensi",
+    shortLabel: "Hipertensi",
+    description: "Pelayanan Kesehatan Penderita Hipertensi",
+    path: "/hipertensi",
     // DEFINISI KATEGORI INDIKATOR (PENTING!)
     indicators: {
       // Bagian A: Sasaran Manusia (Pelayanan Dasar)
-      partA: ['JUMLAH YANG HARUS DILAYANI'],
+      partA: ["JUMLAH YANG HARUS DILAYANI"],
       // Bagian B: Sasaran Barang/Jasa (Mutu Layanan)
       partB: [
-        'Obat Hipertensi',
-        'Tensimeter',
-        'Pedoman pengendalian Hipertensi dan media Komunikasi, Informasi, Edukasi (KIE)',
-        'Media Promosi Kesehatan',
-        'Formulir pencatatan dan pelaporan Aplikasi Sehat Indonesiaku (ASIK)',
-        'Tenaga Medis : Dokter',
-        'Tenaga Kesehatan : Bidan',
-        'Tenaga Kesehatan : Perawat',
-        'Tenaga Kesehatan : Tenaga Gizi',
-        'Tenaga Kesehatan : Tenaga Promosi Kesehatan dan Ilmu Perilaku',
-        'Tenaga Kesehatan : Tenaga Kefarmasian',
-        'Tenaga Kesehatan : Tenaga Kesehatan Masyarakat',
+        "Obat Hipertensi",
+        "Tensimeter",
+        "Pedoman pengendalian Hipertensi dan media Komunikasi, Informasi, Edukasi (KIE)",
+        "Media Promosi Kesehatan",
+        "Formulir pencatatan dan pelaporan Aplikasi Sehat Indonesiaku (ASIK)",
+        "Tenaga Medis : Dokter",
+        "Tenaga Kesehatan : Bidan",
+        "Tenaga Kesehatan : Perawat",
+        "Tenaga Kesehatan : Tenaga Gizi",
+        "Tenaga Kesehatan : Tenaga Promosi Kesehatan dan Ilmu Perilaku",
+        "Tenaga Kesehatan : Tenaga Kefarmasian",
+        "Tenaga Kesehatan : Tenaga Kesehatan Masyarakat",
       ],
       // Sub-kategori Part B untuk tampilan granular
       partBBarang: [
-        'Obat Hipertensi',
-        'Tensimeter',
-        'Pedoman pengendalian Hipertensi dan media Komunikasi, Informasi, Edukasi (KIE)',
-        'Media Promosi Kesehatan',
-        'Formulir pencatatan dan pelaporan Aplikasi Sehat Indonesiaku (ASIK)',
+        "Obat Hipertensi",
+        "Tensimeter",
+        "Pedoman pengendalian Hipertensi dan media Komunikasi, Informasi, Edukasi (KIE)",
+        "Media Promosi Kesehatan",
+        "Formulir pencatatan dan pelaporan Aplikasi Sehat Indonesiaku (ASIK)",
       ],
       partBSDM: [
-        'Tenaga Medis : Dokter',
-        'Tenaga Kesehatan : Bidan',
-        'Tenaga Kesehatan : Perawat',
-        'Tenaga Kesehatan : Tenaga Gizi',
-        'Tenaga Kesehatan : Tenaga Promosi Kesehatan dan Ilmu Perilaku',
-        'Tenaga Kesehatan : Tenaga Kefarmasian',
-        'Tenaga Kesehatan : Tenaga Kesehatan Masyarakat',
+        "Tenaga Medis : Dokter",
+        "Tenaga Kesehatan : Bidan",
+        "Tenaga Kesehatan : Perawat",
+        "Tenaga Kesehatan : Tenaga Gizi",
+        "Tenaga Kesehatan : Tenaga Promosi Kesehatan dan Ilmu Perilaku",
+        "Tenaga Kesehatan : Tenaga Kefarmasian",
+        "Tenaga Kesehatan : Tenaga Kesehatan Masyarakat",
       ],
     },
     theme: {
-      name: 'rose',
+      name: "rose",
       // Warna Primary
-      primary: '#e11d48',        // rose-600
-      primaryLight: '#ffe4e6',   // rose-100
-      primaryDark: '#be123c',    // rose-700
+      primary: "#e11d48", // rose-600
+      primaryLight: "#ffe4e6", // rose-100
+      primaryDark: "#be123c", // rose-700
       // Tailwind Classes
-      bg: 'bg-rose-600',
-      bgLight: 'bg-rose-100',
-      bgLighter: 'bg-rose-50',
-      text: 'text-rose-600',
-      textDark: 'text-rose-700',
-      textLight: 'text-rose-100',
-      border: 'border-rose-200',
-      borderDark: 'border-rose-600',
-      ring: 'ring-rose-500',
-      hover: 'hover:bg-rose-700',
+      bg: "bg-rose-600",
+      bgLight: "bg-rose-100",
+      bgLighter: "bg-rose-50",
+      text: "text-rose-600",
+      textDark: "text-rose-700",
+      textLight: "text-rose-100",
+      border: "border-rose-200",
+      borderDark: "border-rose-600",
+      ring: "ring-rose-500",
+      hover: "hover:bg-rose-700",
       // Chart Colors
-      chartPrimary: '#e11d48',
-      chartSecondary: '#fb7185',
-      chartAccent: '#fda4af',
+      chartPrimary: "#e11d48",
+      chartSecondary: "#fb7185",
+      chartAccent: "#fda4af",
     },
-    icon: '❤️',
+    icon: "❤️",
   },
   DIABETES: {
-    id: 'DIABETES',
-    label: 'SPM Diabetes Melitus',
-    shortLabel: 'Diabetes',
-    description: 'Pelayanan Kesehatan Penderita Diabetes Melitus',
-    path: '/diabetes',
+    id: "DIABETES",
+    label: "SPM Diabetes Melitus",
+    shortLabel: "Diabetes",
+    description: "Pelayanan Kesehatan Penderita Diabetes Melitus",
+    path: "/diabetes",
     // DEFINISI KATEGORI INDIKATOR (PENTING!)
     indicators: {
       // Bagian A: Sasaran Manusia (Pelayanan Dasar)
-      partA: ['JUMLAH YANG HARUS DILAYANI'],
+      partA: ["JUMLAH YANG HARUS DILAYANI"],
       // Bagian B: Sasaran Barang/Jasa (Mutu Layanan)
       partB: [
-        'Obat Diabetes Melitus',
-        'Fotometer atau Glukometer',
-        'Regen Glukosa atau Strip tes Gula darah',
-        'Pedoman Pengendalian DM dan media KIE',
-        'Media Promosi Kesehatan',
-        'Formulir pencatatan dan pelaporan',
-        'Tenaga Medis : Dokter',
-        'Tenaga Kesehatan : Bidan',
-        'Tenaga Kesehatan : Perawat',
-        'Tenaga Kesehatan : Tenaga Gizi',
-        'Tenaga Kesehatan : Tenaga Promosi Kesehatan',
-        'Tenaga Kesehatan : Tenaga Kefarmasian',
+        "Pedoman Pengendalian DM dan media KIE",
+        "Media Promosi Kesehatan",
+        "Obat Diabetes (Metformin/Glibenklamid)",
+        "Alat Pemeriksaan Gula Darah",
+        "Strip Gula Darah",
+        "Formulir pencatatan dan pelaporan",
+        "Tenaga Medis : Dokter",
+        "Tenaga Kesehatan : Bidan",
+        "Tenaga Kesehatan : Perawat",
+        "Tenaga Kesehatan : Tenaga Gizi",
+        "Tenaga Kesehatan : Tenaga Promosi Kesehatan",
+        "Tenaga Kesehatan : Tenaga Kefarmasian",
       ],
       partBBarang: [
-        'Obat Diabetes Melitus',
-        'Fotometer atau Glukometer',
-        'Regen Glukosa atau Strip tes Gula darah',
-        'Pedoman Pengendalian DM dan media KIE',
-        'Media Promosi Kesehatan',
-        'Formulir pencatatan dan pelaporan',
+        "Pedoman Pengendalian DM dan media KIE",
+        "Media Promosi Kesehatan",
+        "Obat Diabetes (Metformin/Glibenklamid)",
+        "Alat Pemeriksaan Gula Darah",
+        "Strip Gula Darah",
+        "Formulir pencatatan dan pelaporan",
       ],
       partBSDM: [
-        'Tenaga Medis : Dokter',
-        'Tenaga Kesehatan : Bidan',
-        'Tenaga Kesehatan : Perawat',
-        'Tenaga Kesehatan : Tenaga Gizi',
-        'Tenaga Kesehatan : Tenaga Promosi Kesehatan',
-        'Tenaga Kesehatan : Tenaga Kefarmasian',
+        "Tenaga Medis : Dokter",
+        "Tenaga Kesehatan : Bidan",
+        "Tenaga Kesehatan : Perawat",
+        "Tenaga Kesehatan : Tenaga Gizi",
+        "Tenaga Kesehatan : Tenaga Promosi Kesehatan",
+        "Tenaga Kesehatan : Tenaga Kefarmasian",
       ],
     },
     theme: {
-      name: 'emerald',
+      name: "emerald",
       // Warna Primary
-      primary: '#059669',        // emerald-600
-      primaryLight: '#d1fae5',   // emerald-100
-      primaryDark: '#047857',    // emerald-700
+      primary: "#059669", // emerald-600
+      primaryLight: "#d1fae5", // emerald-100
+      primaryDark: "#047857", // emerald-700
       // Tailwind Classes
-      bg: 'bg-emerald-600',
-      bgLight: 'bg-emerald-100',
-      bgLighter: 'bg-emerald-50',
-      text: 'text-emerald-600',
-      textDark: 'text-emerald-700',
-      textLight: 'text-emerald-100',
-      border: 'border-emerald-200',
-      borderDark: 'border-emerald-600',
-      ring: 'ring-emerald-500',
-      hover: 'hover:bg-emerald-700',
+      bg: "bg-emerald-600",
+      bgLight: "bg-emerald-100",
+      bgLighter: "bg-emerald-50",
+      text: "text-emerald-600",
+      textDark: "text-emerald-700",
+      textLight: "text-emerald-100",
+      border: "border-emerald-200",
+      borderDark: "border-emerald-600",
+      ring: "ring-emerald-500",
+      hover: "hover:bg-emerald-700",
       // Chart Colors
-      chartPrimary: '#059669',
-      chartSecondary: '#34d399',
-      chartAccent: '#6ee7b7',
+      chartPrimary: "#059669",
+      chartSecondary: "#34d399",
+      chartAccent: "#6ee7b7",
     },
-    icon: '🩸',
+    icon: "🩸",
   },
   ODGJ: {
-    id: 'ODGJ',
-    label: 'SPM ODGJ Berat',
-    shortLabel: 'ODGJ',
-    description: 'Pelayanan Kesehatan Orang dengan Gangguan Jiwa Berat',
-    path: '/odgj',
+    id: "ODGJ",
+    label: "SPM ODGJ Berat",
+    shortLabel: "ODGJ",
+    description: "Pelayanan Kesehatan Orang dengan Gangguan Jiwa Berat",
+    path: "/odgj",
     // DEFINISI KATEGORI INDIKATOR (PENTING!)
     indicators: {
       // Bagian A: Sasaran Manusia (Pelayanan Dasar)
-      partA: ['JUMLAH YANG HARUS DILAYANI'],
+      partA: ["JUMLAH YANG HARUS DILAYANI"],
       // Bagian B: Sasaran Barang/Jasa (Mutu Layanan)
       partB: [
-        'Buku Pedoman Diagnosis (PPDGJ III)',
-        'Penyediaan obat psikofarmaka',
-        'Penyediaan formulir Skrining kesehatan jiwa',
-        'Pedoman Pengendalian Kesehatan Jiwa dan media KIE',
-        'Media Promosi Kesehatan Jiwa',
-        'Alat Fiksasi (Restraint)',
-        'Formulir pencatatan dan pelaporan Keswa',
-        'Tenaga Medis : Dokter',
-        'Tenaga Kesehatan : Perawat',
-        'Tenaga Kesehatan : Kompetensi Jiwa',
-        'Tenaga Kesehatan : Psikolog/Pekerja Sosial',
-        'Tenaga Kesehatan : Tenaga Promosi Kesehatan',
+        "Pedoman Pengendalian Kesehatan Jiwa dan media KIE",
+        "Media Promosi Kesehatan Jiwa",
+        "Obat Psikotropika (Haloperidol/Risperidone)",
+        "Alat Fiksasi (Restraint)",
+        "Formulir pencatatan dan pelaporan Keswa",
+        "Tenaga Medis : Dokter",
+        "Tenaga Kesehatan : Perawat",
+        "Tenaga Kesehatan : Psikolog/Pekerja Sosial",
+        "Tenaga Kesehatan : Tenaga Promosi Kesehatan",
       ],
       partBBarang: [
-        'Buku Pedoman Diagnosis (PPDGJ III)',
-        'Penyediaan obat psikofarmaka',
-        'Penyediaan formulir Skrining kesehatan jiwa',
-        'Pedoman Pengendalian Kesehatan Jiwa dan media KIE',
-        'Media Promosi Kesehatan Jiwa',
-        'Alat Fiksasi (Restraint)',
-        'Formulir pencatatan dan pelaporan Keswa',
+        "Pedoman Pengendalian Kesehatan Jiwa dan media KIE",
+        "Media Promosi Kesehatan Jiwa",
+        "Obat Psikotropika (Haloperidol/Risperidone)",
+        "Alat Fiksasi (Restraint)",
+        "Formulir pencatatan dan pelaporan Keswa",
       ],
       partBSDM: [
-        'Tenaga Medis : Dokter',
-        'Tenaga Kesehatan : Perawat',
-        'Tenaga Kesehatan : Kompetensi Jiwa',
-        'Tenaga Kesehatan : Psikolog/Pekerja Sosial',
-        'Tenaga Kesehatan : Tenaga Promosi Kesehatan',
+        "Tenaga Medis : Dokter",
+        "Tenaga Kesehatan : Perawat",
+        "Tenaga Kesehatan : Psikolog/Pekerja Sosial",
+        "Tenaga Kesehatan : Tenaga Promosi Kesehatan",
       ],
     },
     theme: {
-      name: 'violet',
+      name: "violet",
       // Warna Primary
-      primary: '#7c3aed',        // violet-600
-      primaryLight: '#ede9fe',   // violet-100
-      primaryDark: '#6d28d9',    // violet-700
+      primary: "#7c3aed", // violet-600
+      primaryLight: "#ede9fe", // violet-100
+      primaryDark: "#6d28d9", // violet-700
       // Tailwind Classes
-      bg: 'bg-violet-600',
-      bgLight: 'bg-violet-100',
-      bgLighter: 'bg-violet-50',
-      text: 'text-violet-600',
-      textDark: 'text-violet-700',
-      textLight: 'text-violet-100',
-      border: 'border-violet-200',
-      borderDark: 'border-violet-600',
-      ring: 'ring-violet-500',
-      hover: 'hover:bg-violet-700',
+      bg: "bg-violet-600",
+      bgLight: "bg-violet-100",
+      bgLighter: "bg-violet-50",
+      text: "text-violet-600",
+      textDark: "text-violet-700",
+      textLight: "text-violet-100",
+      border: "border-violet-200",
+      borderDark: "border-violet-600",
+      ring: "ring-violet-500",
+      hover: "hover:bg-violet-700",
       // Chart Colors
-      chartPrimary: '#7c3aed',
-      chartSecondary: '#a78bfa',
-      chartAccent: '#c4b5fd',
+      chartPrimary: "#7c3aed",
+      chartSecondary: "#a78bfa",
+      chartAccent: "#c4b5fd",
     },
-    icon: '🧠',
-  }
+    icon: "🧠",
+  },
 };
 
 // ============================================
@@ -324,7 +318,7 @@ export const PROGRAMS = {
 // ============================================
 
 // Array untuk iterasi (dropdown, navigasi, dll)
-export const PROGRAM_TYPES_LIST = Object.values(PROGRAMS).map(p => ({
+export const PROGRAM_TYPES_LIST = Object.values(PROGRAMS).map((p) => ({
   value: p.id,
   label: p.label,
   shortLabel: p.shortLabel,
@@ -353,13 +347,13 @@ export const getProgram = (programId) => {
 // Mendapatkan label dari program type
 export const getProgramLabel = (type) => {
   const program = PROGRAMS[type];
-  return program ? program.label : 'Unknown Program';
+  return program ? program.label : "Unknown Program";
 };
 
 // Mendapatkan short label dari program type
 export const getProgramShortLabel = (type) => {
   const program = PROGRAMS[type];
-  return program ? program.shortLabel : 'Unknown';
+  return program ? program.shortLabel : "Unknown";
 };
 
 // Mendapatkan theme dari program type
@@ -370,7 +364,9 @@ export const getProgramTheme = (type) => {
 
 // Mendapatkan program berdasarkan path
 export const getProgramByPath = (path) => {
-  return Object.values(PROGRAMS).find(p => p.path === path) || PROGRAMS.HIPERTENSI;
+  return (
+    Object.values(PROGRAMS).find((p) => p.path === path) || PROGRAMS.HIPERTENSI
+  );
 };
 
 // ============================================
