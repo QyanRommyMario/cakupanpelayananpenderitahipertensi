@@ -232,37 +232,49 @@ export default function LaporanPage() {
 
     const pkmTotals = {};
 
-    // Group by puskesmas
-    data.forEach((row) => {
-      if (!pkmTotals[row.puskesmas_code]) {
-        const pkm = puskesmasList.find((p) => p.code === row.puskesmas_code);
-        pkmTotals[row.puskesmas_code] = {
-          code: row.puskesmas_code,
-          name: pkm?.name || row.puskesmas_code,
-          totalTarget: 0,
-          totalRealization: 0,
-          // Untuk SEMUA_PROGRAM, track per program
-          byProgram: {
-            USIA_PRODUKTIF: { target: 0, realization: 0 },
-            HIPERTENSI: { target: 0, realization: 0 },
-            DIABETES: { target: 0, realization: 0 },
-            ODGJ: { target: 0, realization: 0 },
-          },
-        };
-      }
-      pkmTotals[row.puskesmas_code].totalTarget += row.target_qty || 0;
-      pkmTotals[row.puskesmas_code].totalRealization +=
-        row.realization_qty || 0;
+    // PENTING: Inisialisasi SEMUA puskesmas dari master list (14 puskesmas)
+    // Agar puskesmas yang belum input data tetap muncul di rekap (dengan nilai 0)
+    puskesmasList.forEach((pkm) => {
+      if (pkm.code === "KAB") return; // Skip Dinas Kesehatan
+      pkmTotals[pkm.code] = {
+        code: pkm.code,
+        name: pkm.name,
+        totalTarget: 0,
+        totalRealization: 0,
+        // Untuk SEMUA_PROGRAM, track per program
+        byProgram: {
+          USIA_PRODUKTIF: { target: 0, realization: 0 },
+          HIPERTENSI: { target: 0, realization: 0 },
+          DIABETES: { target: 0, realization: 0 },
+          ODGJ: { target: 0, realization: 0 },
+        },
+      };
+    });
 
-      // Track by program untuk SEMUA_PROGRAM view
-      if (
-        row.program_type &&
-        pkmTotals[row.puskesmas_code].byProgram[row.program_type]
-      ) {
-        pkmTotals[row.puskesmas_code].byProgram[row.program_type].target +=
-          row.target_qty || 0;
-        pkmTotals[row.puskesmas_code].byProgram[row.program_type].realization +=
+    // PENTING: Untuk rekap admin, HANYA hitung Part A ("JUMLAH YANG HARUS DILAYANI")
+    // Part B (Barang/Jasa/SDM) TIDAK ikut dijumlahkan ke total rekap
+    // Ini konsisten dengan getGlobalSummary() di dataHelpers.js
+    data.forEach((row) => {
+      // Skip jika puskesmas tidak ada di master list
+      if (!pkmTotals[row.puskesmas_code]) return;
+
+      // FILTER: Hanya hitung indikator Part A untuk rekap admin
+      // Part B (barang/jasa/SDM) tidak masuk hitungan total rekap
+      if (row.indicator_name === "JUMLAH YANG HARUS DILAYANI") {
+        pkmTotals[row.puskesmas_code].totalTarget += row.target_qty || 0;
+        pkmTotals[row.puskesmas_code].totalRealization +=
           row.realization_qty || 0;
+
+        // Track by program untuk SEMUA_PROGRAM view
+        if (
+          row.program_type &&
+          pkmTotals[row.puskesmas_code].byProgram[row.program_type]
+        ) {
+          pkmTotals[row.puskesmas_code].byProgram[row.program_type].target +=
+            row.target_qty || 0;
+          pkmTotals[row.puskesmas_code].byProgram[row.program_type].realization +=
+            row.realization_qty || 0;
+        }
       }
     });
 
@@ -2356,13 +2368,13 @@ export default function LaporanPage() {
                       Kode
                     </th>
                     <th className="px-4 py-3 text-right text-sm font-semibold w-28">
-                      Total Target
+                      Sasaran
                     </th>
                     <th className="px-4 py-3 text-right text-sm font-semibold w-28">
-                      Total Realisasi
+                      Realisasi
                     </th>
                     <th className="px-4 py-3 text-center text-sm font-semibold w-28">
-                      Rata-rata %
+                      % Capaian
                     </th>
                     <th className="px-4 py-3 text-center text-sm font-semibold w-32">
                       Status
