@@ -62,6 +62,10 @@ export default function InputDataPage() {
   // Validation state untuk Program Type
   const [programTypeError, setProgramTypeError] = useState(false);
 
+  // State untuk propagasi target Januari
+  const [propagating, setPropagating] = useState(false);
+  const [isTargetAutoFilled, setIsTargetAutoFilled] = useState(false);
+
   // Show toast notification
   const showToast = (message, type = "success") => {
     setToast({ show: true, message, type });
@@ -69,6 +73,67 @@ export default function InputDataPage() {
       () => setToast({ show: false, message: "", type: "success" }),
       3000,
     );
+  };
+
+  // Helper: Check if period is January
+  const isJanuaryPeriod = (period) => {
+    return period && period.endsWith("-01");
+  };
+
+  // Helper: Get next period (e.g., 2026-01 -> 2026-02)
+  const getNextPeriod = (period) => {
+    const [year, month] = period.split("-");
+    const m = parseInt(month);
+    if (m >= 12) return null; // No next month in this year
+    return `${year}-${String(m + 1).padStart(2, "0")}`;
+  };
+
+  // Propagate targets to the next month only (carry-over)
+  const propagateTargetToNextMonth = async (
+    puskesmasCode,
+    programType,
+    currentRecords,
+  ) => {
+    const nextPeriod = getNextPeriod(selectedPeriod);
+    if (!nextPeriod) return null; // December, no next month
+
+    // Check if next month already has data
+    const { data: nextData, error: fetchError } = await supabase
+      .from("achievements")
+      .select("indicator_name, realization_qty")
+      .eq("puskesmas_code", puskesmasCode)
+      .eq("program_type", programType)
+      .eq("period", nextPeriod);
+
+    if (fetchError) return fetchError;
+
+    // Build lookup for existing realization in next month
+    const existingMap = {};
+    (nextData || []).forEach((e) => {
+      existingMap[e.indicator_name] = e.realization_qty || 0;
+    });
+
+    // Build records for next month: carry over targets AND realization
+    // If next month already has data, preserve it; otherwise carry over current month's values
+    const nextRecords = currentRecords.map((rec) => ({
+      puskesmas_code: puskesmasCode,
+      indicator_name: rec.indicator_name,
+      period: nextPeriod,
+      program_type: programType,
+      target_qty: rec.target_qty,
+      realization_qty: existingMap[rec.indicator_name] || rec.realization_qty || 0,
+      unit: rec.unit,
+    }));
+
+    // Upsert next month
+    const { error: upsertError } = await supabase
+      .from("achievements")
+      .upsert(nextRecords, {
+        onConflict:
+          "puskesmas_code,indicator_name,period,program_type",
+      });
+
+    return upsertError;
   };
 
   // Check if user is admin
@@ -197,19 +262,90 @@ export default function InputDataPage() {
         const hasData = achievements && achievements.length > 0;
         setIsEditMode(hasData);
 
-        // Update form data with existing data or defaults
-        const updatedData = {};
-        indicators.forEach((ind) => {
-          const existing = achievements?.find(
-            (a) => a.indicator_name === ind.indicator_name,
-          );
-          updatedData[ind.indicator_name] = {
-            target: existing?.target_qty || 0,
-            realization: existing?.realization_qty || 0,
-            unit: existing?.unit || ind.unit || "Orang",
-          };
-        });
-        setFormData(updatedData);
+        if (hasData) {
+          // Update form data with existing data
+          const updatedData = {};
+          indicators.forEach((ind) => {
+            const existing = achievements?.find(
+              (a) => a.indicator_name === ind.indicator_name,
+            );
+            updatedData[ind.indicator_name] = {
+              target: existing?.target_qty || 0,
+              realization: existing?.realization_qty || 0,
+              unit: existing?.unit || ind.unit || "Orang",
+            };
+          });
+          setFormData(updatedData);
+          setIsTargetAutoFilled(false);
+        } else {
+          // No data for this month: try to auto-fill targets from the most recent previous month
+          const year = selectedPeriod.split("-")[0];
+          const currentMonth = parseInt(selectedPeriod.split("-")[1]);
+
+          // Build list of all prior months in the same year (most recent first)
+          const priorPeriods = [];
+          for (let m = currentMonth - 1; m >= 1; m--) {
+            priorPeriods.push(`${year}-${String(m).padStart(2, "0")}`);
+          }
+
+          let autoFilled = false;
+          let sourcePeriodLabel = "";
+
+          if (priorPeriods.length > 0) {
+            // Fetch all data from prior months to find the most recent one
+            const { data: priorData } = await supabase
+              .from("achievements")
+              .select("*")
+              .eq("puskesmas_code", selectedPuskesmas)
+              .eq("program_type", selectedProgramType)
+              .in("period", priorPeriods)
+              .order("period", { ascending: false });
+
+            if (priorData && priorData.length > 0) {
+              // Get the most recent period that has data
+              const latestPeriod = priorData[0].period;
+              const latestData = priorData.filter((d) => d.period === latestPeriod);
+
+              // Format source month label
+              const srcMonth = parseInt(latestPeriod.split("-")[1]);
+              const monthNames = ["", "Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+              sourcePeriodLabel = monthNames[srcMonth] || latestPeriod;
+
+              const updatedData = {};
+              indicators.forEach((ind) => {
+                const prevRecord = latestData.find(
+                  (a) => a.indicator_name === ind.indicator_name,
+                );
+                updatedData[ind.indicator_name] = {
+                  target: prevRecord?.target_qty || 0,
+                  realization: prevRecord?.realization_qty || 0,
+                  unit: prevRecord?.unit || ind.unit || "Orang",
+                };
+              });
+              setFormData(updatedData);
+              setIsTargetAutoFilled(true);
+              autoFilled = true;
+              showToast(
+                `Target & Realisasi otomatis diisi dari data ${sourcePeriodLabel}. Silakan sesuaikan sesuai kebutuhan.`,
+                "success",
+              );
+            }
+          }
+
+          if (!autoFilled) {
+            // No prior data found, initialize empty
+            const updatedData = {};
+            indicators.forEach((ind) => {
+              updatedData[ind.indicator_name] = {
+                target: 0,
+                realization: 0,
+                unit: ind.unit || "Orang",
+              };
+            });
+            setFormData(updatedData);
+            setIsTargetAutoFilled(false);
+          }
+        }
       } catch (err) {
         logger.error("Load data error", err);
         setError("Gagal memuat data: " + err.message);
@@ -301,10 +437,40 @@ export default function InputDataPage() {
 
       if (upsertError) throw upsertError;
 
-      showToast(
-        `Data ${getProgramLabel(selectedProgramType)} berhasil disimpan!`,
-        "success",
-      );
+      // Propagasi target ke bulan berikutnya (carry-over)
+      const nextPeriod = getNextPeriod(selectedPeriod);
+      if (nextPeriod) {
+        setPropagating(true);
+        const propError = await propagateTargetToNextMonth(
+          targetPuskesmasCode,
+          selectedProgramType,
+          records,
+        );
+        setPropagating(false);
+
+        if (propError) {
+          logger.error("Propagation error", propError);
+          const currentMonthNum = parseInt(selectedPeriod.split("-")[1]);
+          const nextMonthNum = currentMonthNum + 1;
+          const monthNames = ["", "Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+          showToast(
+            `Data tersimpan, tapi gagal menyalin target ke ${monthNames[nextMonthNum]}: ${propError.message}`,
+            "error",
+          );
+        } else {
+          showToast(
+            `Data ${getProgramLabel(selectedProgramType)} berhasil disimpan! Target otomatis diteruskan ke bulan berikutnya.`,
+            "success",
+          );
+        }
+      } else {
+        // December - no next month
+        showToast(
+          `Data ${getProgramLabel(selectedProgramType)} berhasil disimpan!`,
+          "success",
+        );
+      }
+
       setIsEditMode(true);
     } catch (err) {
       logger.error("Save error", err);
@@ -319,6 +485,9 @@ export default function InputDataPage() {
     const pkm = puskesmasList.find((p) => p.code === selectedPuskesmas);
     return pkm?.name || selectedPuskesmas;
   };
+
+  // Check if non-January period (for auto-fill visual cues)
+  const isNonJanuary = selectedPeriod && !isJanuaryPeriod(selectedPeriod);
 
   // Render Input Row
   const renderInputRow = (indicator, idx, startNo = 1) => {
@@ -345,25 +514,32 @@ export default function InputDataPage() {
           {unit}
         </td>
 
-        {/* Target Input */}
+        {/* Target Input - Styled differently when auto-filled from January */}
         <td className="px-4 py-3">
-          <input
-            type="number"
-            min="0"
-            value={data.target}
-            onChange={(e) =>
-              handleInputChange(
-                indicator.indicator_name,
-                "target",
-                e.target.value,
-              )
-            }
-            className="w-full px-3 py-2 text-center border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 tabular-nums"
-            placeholder={`Target (${unit})`}
-          />
+          <div className="relative">
+            <input
+              type="number"
+              min="0"
+              value={data.target}
+              onChange={(e) =>
+                handleInputChange(
+                  indicator.indicator_name,
+                  "target",
+                  e.target.value,
+                )
+              }
+              className={`w-full px-3 py-2 text-center border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 tabular-nums ${
+                isTargetAutoFilled
+                  ? "border-green-300 bg-green-50 text-green-800"
+                  : "border-slate-300"
+              }`}
+              placeholder={`Target (${unit})`}
+            />
+
+          </div>
         </td>
 
-        {/* Realisasi Input */}
+        {/* Realisasi Input - Highlighted for non-January periods */}
         <td className="px-4 py-3">
           <input
             type="number"
@@ -376,8 +552,12 @@ export default function InputDataPage() {
                 e.target.value,
               )
             }
-            className="w-full px-3 py-2 text-center border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 tabular-nums font-semibold text-blue-600"
-            placeholder={`Realisasi (${unit})`}
+            className={`w-full px-3 py-2 text-center border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 tabular-nums font-semibold ${
+              isNonJanuary
+                ? "border-blue-400 bg-blue-50 text-blue-700 ring-1 ring-blue-200"
+                : "border-slate-300 text-blue-600"
+            }`}
+            placeholder={isNonJanuary ? `Isi Realisasi` : `Realisasi (${unit})`}
           />
         </td>
 
@@ -732,6 +912,52 @@ export default function InputDataPage() {
           indicators.length > 0 &&
           !loadingData && (
             <>
+              {/* Info Banner: Target Auto-Fill */}
+              {isJanuaryPeriod(selectedPeriod) && !isEditMode && (
+                <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-300 rounded-xl p-4 flex items-center gap-3">
+                  <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-green-800">Periode Januari - Input Target Awal</p>
+                    <p className="text-sm text-green-700">
+                      Isi semua target di bulan Januari. Saat disimpan, target akan <strong>otomatis diteruskan ke bulan berikutnya</strong>.
+                      Di bulan-bulan berikutnya, target bisa disesuaikan sesuai kebutuhan.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {isTargetAutoFilled && (
+                <div className="bg-gradient-to-r from-sky-50 to-blue-50 border border-sky-300 rounded-xl p-4 flex items-center gap-3">
+                  <div className="w-10 h-10 bg-sky-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sky-800">Target & Realisasi Otomatis dari Bulan Sebelumnya</p>
+                    <p className="text-sm text-sky-700">
+                      Target dan Realisasi sudah terisi otomatis dari bulan sebelumnya. Anda bisa <strong>menambahkan/menyesuaikan angka</strong> sesuai kebutuhan,
+                      lalu simpan.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Propagating Indicator */}
+              {propagating && (
+                <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 flex items-center gap-3">
+                  <svg className="animate-spin h-5 w-5 text-amber-600" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <p className="text-amber-700 font-medium">Meneruskan target ke bulan berikutnya...</p>
+                </div>
+              )}
+
               {/* Current Selection Badge */}
               <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -921,18 +1147,22 @@ export default function InputDataPage() {
               </div>
 
               {/* Save Button - Bottom */}
-              <div className="flex justify-end">
+              <div className="flex flex-col items-end gap-2">
+                <p className="text-xs text-green-600 italic">
+                  * Target otomatis diteruskan ke bulan berikutnya saat disimpan
+                </p>
                 <button
                   onClick={handleSave}
                   disabled={
                     saving ||
+                    propagating ||
                     loadingData ||
                     !selectedPuskesmas ||
                     !selectedProgramType
                   }
                   className="px-8 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-bold rounded-xl transition-colors flex items-center gap-2 text-lg shadow-lg"
                 >
-                  {saving ? (
+                  {saving || propagating ? (
                     <>
                       <svg className="animate-spin h-6 w-6" viewBox="0 0 24 24">
                         <circle
@@ -950,7 +1180,7 @@ export default function InputDataPage() {
                           d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                         />
                       </svg>
-                      Menyimpan...
+                      {propagating ? "Meneruskan target..." : "Menyimpan..."}
                     </>
                   ) : (
                     <>
@@ -967,7 +1197,7 @@ export default function InputDataPage() {
                           d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"
                         />
                       </svg>
-                      💾 Simpan Semua Data
+                      Simpan Data
                     </>
                   )}
                 </button>
@@ -1013,6 +1243,12 @@ export default function InputDataPage() {
             <li>
               • Klik <strong>Simpan Semua Data</strong> di bagian bawah untuk
               menyimpan
+            </li>
+            <li>
+              • <strong className="text-green-600">OTOMATIS:</strong> Target
+              otomatis diisi dari <strong>bulan sebelumnya</strong>. Anda bisa
+              menyesuaikan target jika ada perubahan, lalu simpan. Target yang
+              disimpan akan diteruskan ke <strong>bulan berikutnya</strong>.
             </li>
           </ul>
         </div>
