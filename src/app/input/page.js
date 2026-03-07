@@ -131,8 +131,7 @@ export default function InputDataPage() {
     const { error: upsertError } = await supabase
       .from("achievements")
       .upsert(nextRecords, {
-        onConflict:
-          "puskesmas_code,indicator_name,period,program_type",
+        onConflict: "puskesmas_code,indicator_name,period,program_type",
       });
 
     return upsertError;
@@ -306,11 +305,27 @@ export default function InputDataPage() {
             if (priorData && priorData.length > 0) {
               // Get the most recent period that has data
               const latestPeriod = priorData[0].period;
-              const latestData = priorData.filter((d) => d.period === latestPeriod);
+              const latestData = priorData.filter(
+                (d) => d.period === latestPeriod,
+              );
 
               // Format source month label
               const srcMonth = parseInt(latestPeriod.split("-")[1]);
-              const monthNames = ["", "Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+              const monthNames = [
+                "",
+                "Januari",
+                "Februari",
+                "Maret",
+                "April",
+                "Mei",
+                "Juni",
+                "Juli",
+                "Agustus",
+                "September",
+                "Oktober",
+                "November",
+                "Desember",
+              ];
               sourcePeriodLabel = monthNames[srcMonth] || latestPeriod;
 
               const updatedData = {};
@@ -457,7 +472,21 @@ export default function InputDataPage() {
           logger.error("Propagation error", propError);
           const currentMonthNum = parseInt(selectedPeriod.split("-")[1]);
           const nextMonthNum = currentMonthNum + 1;
-          const monthNames = ["", "Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+          const monthNames = [
+            "",
+            "Januari",
+            "Februari",
+            "Maret",
+            "April",
+            "Mei",
+            "Juni",
+            "Juli",
+            "Agustus",
+            "September",
+            "Oktober",
+            "November",
+            "Desember",
+          ];
           showToast(
             `Data tersimpan, tapi gagal menyalin target ke ${monthNames[nextMonthNum]}: ${propError.message}`,
             "error",
@@ -540,7 +569,6 @@ export default function InputDataPage() {
               }`}
               placeholder={`Target (${unit})`}
             />
-
           </div>
         </td>
 
@@ -921,15 +949,30 @@ export default function InputDataPage() {
               {isJanuaryPeriod(selectedPeriod) && !isEditMode && (
                 <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-300 rounded-xl p-4 flex items-center gap-3">
                   <div className="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    <svg
+                      className="w-5 h-5 text-white"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
                     </svg>
                   </div>
                   <div>
-                    <p className="font-semibold text-green-800">Periode Januari - Input Target Awal</p>
+                    <p className="font-semibold text-green-800">
+                      Periode Januari - Input Target Awal
+                    </p>
                     <p className="text-sm text-green-700">
-                      Isi semua target di bulan Januari. Saat disimpan, target akan <strong>otomatis diteruskan ke bulan berikutnya</strong>.
-                      Di bulan-bulan berikutnya, target bisa disesuaikan sesuai kebutuhan.
+                      Isi semua target di bulan Januari. Saat disimpan, target
+                      akan{" "}
+                      <strong>otomatis diteruskan ke bulan berikutnya</strong>.
+                      Di bulan-bulan berikutnya, target bisa disesuaikan sesuai
+                      kebutuhan.
                     </p>
                   </div>
                 </div>
@@ -938,15 +981,29 @@ export default function InputDataPage() {
               {isTargetAutoFilled && (
                 <div className="bg-gradient-to-r from-sky-50 to-blue-50 border border-sky-300 rounded-xl p-4 flex items-center gap-3">
                   <div className="w-10 h-10 bg-sky-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    <svg
+                      className="w-5 h-5 text-white"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 13l4 4L19 7"
+                      />
                     </svg>
                   </div>
                   <div>
-                    <p className="font-semibold text-sky-800">Target & Realisasi Otomatis dari Bulan Sebelumnya</p>
+                    <p className="font-semibold text-sky-800">
+                      Target & Realisasi Otomatis dari Bulan Sebelumnya
+                    </p>
                     <p className="text-sm text-sky-700">
-                      Target dan Realisasi sudah terisi otomatis dari bulan sebelumnya. Anda bisa <strong>menambahkan/menyesuaikan angka</strong> sesuai kebutuhan,
-                      lalu simpan.
+                      Target dan Realisasi sudah terisi otomatis dari bulan
+                      sebelumnya. Anda bisa{" "}
+                      <strong>menambahkan/menyesuaikan angka</strong> sesuai
+                      kebutuhan, lalu simpan.
                     </p>
                   </div>
                 </div>
@@ -955,11 +1012,28 @@ export default function InputDataPage() {
               {/* Propagating Indicator */}
               {propagating && (
                 <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 flex items-center gap-3">
-                  <svg className="animate-spin h-5 w-5 text-amber-600" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  <svg
+                    className="animate-spin h-5 w-5 text-amber-600"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                      fill="none"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
                   </svg>
-                  <p className="text-amber-700 font-medium">Meneruskan target ke bulan berikutnya...</p>
+                  <p className="text-amber-700 font-medium">
+                    Meneruskan target ke bulan berikutnya...
+                  </p>
                 </div>
               )}
 

@@ -69,7 +69,10 @@ export async function POST(request) {
       const effectiveProgramType = recordProgramType || program_type;
 
       if (!puskesmas_code || !indicator_name) {
-        errors.push({ record, error: "Missing required fields (puskesmas_code, indicator_name)" });
+        errors.push({
+          record,
+          error: "Missing required fields (puskesmas_code, indicator_name)",
+        });
         continue;
       }
 
@@ -107,8 +110,7 @@ export async function POST(request) {
           updated_at: new Date().toISOString(),
         },
         {
-          onConflict:
-            "puskesmas_code,indicator_name,period,program_type",
+          onConflict: "puskesmas_code,indicator_name,period,program_type",
         },
       );
 
