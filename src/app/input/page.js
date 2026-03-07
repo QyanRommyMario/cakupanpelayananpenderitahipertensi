@@ -100,28 +100,30 @@ export default function InputDataPage() {
     // Check if next month already has data
     const { data: nextData, error: fetchError } = await supabase
       .from("achievements")
-      .select("indicator_name, realization_qty")
+      .select("indicator_name, target_qty, realization_qty")
       .eq("puskesmas_code", puskesmasCode)
       .eq("program_type", programType)
       .eq("period", nextPeriod);
 
     if (fetchError) return fetchError;
 
-    // Build lookup for existing realization in next month
-    const existingMap = {};
-    (nextData || []).forEach((e) => {
-      existingMap[e.indicator_name] = e.realization_qty || 0;
-    });
+    // Jika bulan berikutnya SUDAH punya data, JANGAN timpa (preserve existing data)
+    // Hanya propagate jika bulan berikutnya BELUM ada data sama sekali
+    if (nextData && nextData.length > 0) {
+      // Bulan berikutnya sudah ada data → skip propagation, jangan overwrite
+      return null;
+    }
 
-    // Build records for next month: carry over targets AND realization
-    // If next month already has data, preserve it; otherwise carry over current month's values
+    // Bulan berikutnya belum ada data → buat records baru dengan target carry-over
+    // Realisasi diset 0 karena bulan baru belum ada capaian
     const nextRecords = currentRecords.map((rec) => ({
       puskesmas_code: puskesmasCode,
       indicator_name: rec.indicator_name,
       period: nextPeriod,
       program_type: programType,
       target_qty: rec.target_qty,
-      realization_qty: existingMap[rec.indicator_name] || rec.realization_qty || 0,
+      realization_qty: 0, // Bulan baru, realisasi mulai dari 0
+      unserved_qty: Math.max(0, rec.target_qty),
       unit: rec.unit,
     }));
 
@@ -418,13 +420,16 @@ export default function InputDataPage() {
           target: 0,
           realization: 0,
         };
+        const targetVal = Number(data.target) || 0;
+        const realizationVal = Number(data.realization) || 0;
         return {
           puskesmas_code: targetPuskesmasCode, // KEAMANAN: Gunakan validated code
           indicator_name: ind.indicator_name,
           period: selectedPeriod,
           program_type: selectedProgramType, // WAJIB: Program Type
-          target_qty: data.target,
-          realization_qty: data.realization,
+          target_qty: targetVal,
+          realization_qty: realizationVal,
+          unserved_qty: Math.max(0, targetVal - realizationVal),
           unit: data.unit || ind.unit || "Orang",
         };
       });

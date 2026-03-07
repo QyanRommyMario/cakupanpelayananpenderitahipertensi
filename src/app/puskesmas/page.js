@@ -12,6 +12,14 @@ import {
 } from "recharts";
 import DashboardLayout from "@/components/DashboardLayout";
 import { supabase } from "@/lib/supabase";
+import {
+  generateTriwulanOptions,
+  getCurrentPeriod,
+  formatPeriodLabel,
+  isAnnualPeriod,
+  parsePeriod,
+  getQuartersForYear,
+} from "@/utils/periods";
 
 // Color Palette
 const COLORS = {
@@ -22,25 +30,6 @@ const COLORS = {
   amber: "#f59e0b",
 };
 
-// Puskesmas list including KAB
-const PUSKESMAS_ORDER = [
-  "ANT",
-  "BTR",
-  "BTL",
-  "KDL",
-  "LEE",
-  "MYB",
-  "MLN",
-  "PMR",
-  "PDK",
-  "PTB",
-  "PTW",
-  "TBY",
-  "TMT",
-  "WGK",
-  "KAB",
-];
-
 export default function PuskesmasPage() {
   const [data, setData] = useState([]);
   const [puskesmasMaster, setPuskesmasMaster] = useState([]);
@@ -49,6 +38,11 @@ export default function PuskesmasPage() {
     key: "code",
     direction: "asc",
   });
+  const [selectedPeriod, setSelectedPeriod] = useState("");
+  const periodOptions = useMemo(
+    () => generateTriwulanOptions().filter((p) => p.type === "month"),
+    [],
+  );
 
   // KEAMANAN: User & Role State
   const [currentUser, setCurrentUser] = useState(null);
@@ -83,57 +77,76 @@ export default function PuskesmasPage() {
         }
       }
 
-      // Then fetch data with role filtering
-      fetchData(adminStatus, pkmCode);
+      // Set default period then fetch
+      setSelectedPeriod(getCurrentPeriod());
+
+      // Fetch puskesmas master
+      const { data: pkmData } = await supabase
+        .from("puskesmas")
+        .select("*")
+        .order("name");
+      setPuskesmasMaster(pkmData || []);
+      setLoading(false);
     }
     init();
   }, []);
 
-  async function fetchData(adminStatus = isAdmin, pkmCode = userPuskesmasCode) {
-    try {
-      let achievementsQuery = supabase
-        .from("achievements")
-        .select("*")
-        .order("puskesmas_code", { ascending: true });
+  // Fetch achievements data when period changes
+  useEffect(() => {
+    if (!selectedPeriod) return;
 
-      // KEAMANAN: Non-admin hanya melihat data puskesmas sendiri
-      if (!adminStatus && pkmCode) {
-        achievementsQuery = achievementsQuery.eq("puskesmas_code", pkmCode);
+    async function fetchData() {
+      try {
+        let query = supabase
+          .from("achievements")
+          .select("*")
+          .order("puskesmas_code", { ascending: true });
+
+        // Filter by period
+        if (isAnnualPeriod(selectedPeriod)) {
+          const parsed = parsePeriod(selectedPeriod);
+          const quarters = getQuartersForYear(parsed.year);
+          query = query.in("period", quarters);
+        } else {
+          query = query.eq("period", selectedPeriod);
+        }
+
+        // KEAMANAN: Non-admin hanya melihat data puskesmas sendiri
+        if (!isAdmin && userPuskesmasCode) {
+          query = query.eq("puskesmas_code", userPuskesmasCode);
+        }
+
+        const { data: achievements, error } = await query;
+        if (error) throw error;
+        setData(achievements || []);
+      } catch (err) {
+        if (process.env.NODE_ENV === "development") {
+          console.error("Error fetching data:", err);
+        }
       }
-
-      const [achievementsRes, puskesmasRes] = await Promise.all([
-        achievementsQuery,
-        supabase.from("puskesmas").select("*").order("name"),
-      ]);
-
-      if (achievementsRes.error) throw achievementsRes.error;
-      setData(achievementsRes.data || []);
-      setPuskesmasMaster(puskesmasRes.data || []);
-    } catch (err) {
-      // Silent error di production
-      if (process.env.NODE_ENV === "development") {
-        console.error("Error fetching data:", err);
-      }
-    } finally {
-      setLoading(false);
     }
-  }
 
-  // Group data by puskesmas (including KAB)
+    fetchData();
+  }, [selectedPeriod, isAdmin, userPuskesmasCode]);
+
+  // Group data by puskesmas - HANYA hitung Part A ("JUMLAH YANG HARUS DILAYANI")
+  // Konsisten dengan command center dan laporan recap
   const puskesmasData = useMemo(() => {
-    const grouped = data.reduce((acc, curr) => {
-      if (!acc[curr.puskesmas_code]) {
-        acc[curr.puskesmas_code] = {
-          code: curr.puskesmas_code,
-          target: 0,
-          realization: 0,
-        };
-      }
-      acc[curr.puskesmas_code].target += parseFloat(curr.target_qty) || 0;
-      acc[curr.puskesmas_code].realization +=
-        parseFloat(curr.realization_qty) || 0;
-      return acc;
-    }, {});
+    const grouped = data
+      .filter((d) => d.indicator_name === "JUMLAH YANG HARUS DILAYANI")
+      .reduce((acc, curr) => {
+        if (!acc[curr.puskesmas_code]) {
+          acc[curr.puskesmas_code] = {
+            code: curr.puskesmas_code,
+            target: 0,
+            realization: 0,
+          };
+        }
+        acc[curr.puskesmas_code].target += parseFloat(curr.target_qty) || 0;
+        acc[curr.puskesmas_code].realization +=
+          parseFloat(curr.realization_qty) || 0;
+        return acc;
+      }, {});
 
     return Object.values(grouped).map((item) => {
       const masterData = puskesmasMaster.find((m) => m.code === item.code);
@@ -149,19 +162,16 @@ export default function PuskesmasPage() {
     });
   }, [data, puskesmasMaster]);
 
-  // Chart data (ordered by PUSKESMAS_ORDER)
+  // Chart data (ordered dynamically from data)
   const chartData = useMemo(() => {
-    return PUSKESMAS_ORDER.map((code) => {
-      const pkm = puskesmasData.find((p) => p.code === code);
-      return pkm
-        ? {
-            code: pkm.code,
-            name: pkm.name,
-            Target: pkm.target,
-            Realisasi: pkm.realization,
-          }
-        : null;
-    }).filter(Boolean);
+    return puskesmasData
+      .sort((a, b) => a.code.localeCompare(b.code))
+      .map((pkm) => ({
+        code: pkm.code,
+        name: pkm.name,
+        Target: pkm.target,
+        Realisasi: pkm.realization,
+      }));
   }, [puskesmasData]);
 
   // Sorted table data
@@ -177,10 +187,10 @@ export default function PuskesmasPage() {
         bValue = parseFloat(bValue);
       }
 
-      // Special sorting for code based on PUSKESMAS_ORDER
+      // Alphabetical sorting for code
       if (sortConfig.key === "code") {
-        aValue = PUSKESMAS_ORDER.indexOf(a.code);
-        bValue = PUSKESMAS_ORDER.indexOf(b.code);
+        aValue = a.code;
+        bValue = b.code;
       }
 
       if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1;
@@ -349,14 +359,35 @@ export default function PuskesmasPage() {
     <DashboardLayout>
       <div className="p-6 bg-gray-50 min-h-screen">
         <div className="max-w-7xl mx-auto">
-          {/* Header */}
-          <div className="mb-6">
-            <h1 className="text-2xl font-bold text-gray-800">
-              Capaian Per Puskesmas
-            </h1>
-            <p className="text-gray-500 mt-1">
-              Perbandingan target dan realisasi setiap puskesmas
-            </p>
+          {/* Header with Period Filter */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-800">
+                Capaian Per Puskesmas
+              </h1>
+              <p className="text-gray-500 mt-1">
+                Perbandingan target dan realisasi setiap puskesmas -{" "}
+                <span className="font-semibold text-blue-600">
+                  {formatPeriodLabel(selectedPeriod)}
+                </span>
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <label className="text-sm text-gray-600 font-medium">
+                Periode:
+              </label>
+              <select
+                value={selectedPeriod}
+                onChange={(e) => setSelectedPeriod(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent min-w-[220px]"
+              >
+                {periodOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* Summary Cards */}

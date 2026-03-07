@@ -189,12 +189,23 @@ export default function ProgramDashboard({ programType, title }) {
   }, [selectedPeriod, programType, isAdmin, userPuskesmasCode, userLoaded]);
 
   // ============================================
-  // COMPUTED DATA - Sama persis seperti sebelumnya
+  // COMPUTED DATA - Konsisten dengan Command Center & Laporan
   // ============================================
 
-  // Summary Statistics
+  // Part A indicators - dibutuhkan oleh summaryStats dan puskesmasAggregated
+  const partAIndicators = useMemo(
+    () => getPartAIndicators(programType),
+    [programType],
+  );
+
+  // Summary Statistics - HANYA hitung Part A ("JUMLAH YANG HARUS DILAYANI")
+  // Konsisten dengan getGlobalSummary() dan laporan recap
   const summaryStats = useMemo(() => {
-    const filteredData = data.filter((d) => d.puskesmas_code !== "KAB");
+    const filteredData = data.filter(
+      (d) =>
+        d.puskesmas_code !== "KAB" &&
+        partAIndicators.includes(d.indicator_name),
+    );
 
     const totalTarget = filteredData.reduce(
       (sum, d) => sum + (parseFloat(d.target_qty) || 0),
@@ -214,7 +225,7 @@ export default function ProgramDashboard({ programType, title }) {
       totalUnserved,
       percentage: parseFloat(percentage),
     };
-  }, [data]);
+  }, [data, partAIndicators]);
 
   // Pie Chart Data
   const pieChartData = useMemo(() => {
@@ -233,11 +244,16 @@ export default function ProgramDashboard({ programType, title }) {
   }, [summaryStats, theme]);
 
   // Puskesmas Aggregated Data (untuk tabel dan chart)
+  // HANYA hitung Part A - konsisten dengan summaryStats, command center, dan laporan
   const puskesmasAggregated = useMemo(() => {
     const pkmTotals = {};
 
     data
-      .filter((d) => d.puskesmas_code !== "KAB")
+      .filter(
+        (d) =>
+          d.puskesmas_code !== "KAB" &&
+          partAIndicators.includes(d.indicator_name),
+      )
       .forEach((row) => {
         if (!pkmTotals[row.puskesmas_code]) {
           pkmTotals[row.puskesmas_code] = {
@@ -270,10 +286,6 @@ export default function ProgramDashboard({ programType, title }) {
   // ============================================
   // SECTION A: Data Layanan Dasar (Sasaran Manusia)
   // ============================================
-  const partAIndicators = useMemo(
-    () => getPartAIndicators(programType),
-    [programType],
-  );
 
   const sectionAData = useMemo(() => {
     const pkmTotals = {};
